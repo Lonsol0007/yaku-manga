@@ -1085,4 +1085,19 @@
     <string name="migrationListScreen.matchWithoutChapterToast">No chapters found, this entry cannot be used for migration</string>
 
 
+
+    <!-- Translate from link -->
+    <string name="label_translate_link">Translate</string>
+    <string name="translate_link_field">Link to a page or image</string>
+    <string name="translate_link_hint">Paste a direct image link, or a chapter page to pull its images from</string>
+    <string name="action_translate">Translate</string>
+    <string name="translate_link_fetching">Fetching link…</string>
+    <string name="translate_link_translating">Translating</string>
+    <string name="translate_link_error_bad_url">That does not look like a valid link</string>
+    <string name="translate_link_error_no_images">No images found on that page</string>
+    <string name="translate_link_error_all_failed">Could not translate any of the images</string>
+    <string name="translate_link_error_disabled">Turn on translation and install a model pack first</string>
+    <string name="translate_link_error_unsupported">That link is %1$s, not an image or a web page</string>
+    <string name="translate_link_error_http">The site returned HTTP %1$d</string>
+    <string name="translate_link_error_unreachable">Could not reach that link: %1$s</string>
 </resources>

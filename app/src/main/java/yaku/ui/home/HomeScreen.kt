@@ -55,6 +55,7 @@ import yaku.ui.history.HistoryTab
 import yaku.ui.library.LibraryTab
 import yaku.ui.manga.MangaScreen
 import yaku.ui.more.MoreTab
+import yaku.ui.translate.LinkTranslateTab
 import yaku.ui.updates.UpdatesTab
 
 object HomeScreen : Screen() {
@@ -74,6 +75,7 @@ object HomeScreen : Screen() {
         UpdatesTab,
         HistoryTab,
         BrowseTab,
+        LinkTranslateTab,
         MoreTab,
     )
 

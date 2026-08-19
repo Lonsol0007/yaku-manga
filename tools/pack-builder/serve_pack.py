@@ -35,16 +35,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         print(f"  {self.address_string()} - {fmt % args}", flush=True)
 
 
-def lan_address() -> str:
-    """Best-effort LAN IP: the address the machine would use to reach the outside world."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        sock.connect(("8.8.8.8", 80))
-        return sock.getsockname()[0]
-    except OSError:
-        return "127.0.0.1"
-    finally:
-        sock.close()
+def lan_addresses() -> list[str]:
+    """Shared with the builder so both agree on which address the phone should be given."""
+    from build_pack import lan_addresses as candidates
+
+    return candidates()
 
 
 def main() -> None:
@@ -61,7 +56,7 @@ def main() -> None:
     if not manifest.exists():
         print(f"WARNING: no manifest.json in {directory}")
 
-    address = lan_address()
+    addresses = lan_addresses()
 
     class Rooted(Handler):
         def __init__(self, *a, **kw):
@@ -72,7 +67,13 @@ def main() -> None:
         print(f"Serving {directory}")
         print()
         print("  Paste this into Settings -> Translation -> Manifest URL:")
-        print(f"      http://{address}:{args.port}/manifest.json")
+        print(f"      http://{addresses[0]}:{args.port}/manifest.json")
+        if len(addresses) > 1:
+            print()
+            print("  This machine has more than one address. If the phone cannot reach the")
+            print("  one above (a connected VPN is the usual reason), try:")
+            for other in addresses[1:]:
+                print(f"      http://{other}:{args.port}/manifest.json")
         print()
         print("  Phone and PC must be on the same Wi-Fi. Ctrl+C to stop.")
         print()

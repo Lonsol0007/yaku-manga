@@ -87,18 +87,53 @@ FILE_ROLES = [
 ]
 
 
-def lan_address() -> str:
-    """Best-effort LAN IP: the address this machine would use to reach the outside world."""
+def lan_addresses() -> list[str]:
+    """
+    Candidate LAN addresses, most plausible first.
+
+    The obvious implementation - open a UDP socket towards the internet and read back the local
+    address - returns the *VPN* interface when one is connected, and a phone on the Wi-Fi cannot
+    reach that. So collect every private IPv4 the host has and rank them: common home-router
+    ranges first, then anything else private, then the routed address as a last resort.
+    """
     import socket
 
+    routed = None
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.connect(("8.8.8.8", 80))
-        return sock.getsockname()[0]
+        routed = sock.getsockname()[0]
     except OSError:
-        return "127.0.0.1"
+        pass
     finally:
         sock.close()
+
+    found: list[str] = []
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            address = info[4][0]
+            if address not in found and not address.startswith("127."):
+                found.append(address)
+    except socket.gaierror:
+        pass
+
+    def rank(address: str) -> int:
+        if address.startswith("192.168."):
+            return 0
+        if address.startswith("10."):
+            return 1
+        if address.startswith("172."):
+            return 2
+        return 3
+
+    found.sort(key=rank)
+    if routed and routed not in found:
+        found.append(routed)
+    return found or ["127.0.0.1"]
+
+
+def lan_address() -> str:
+    return lan_addresses()[0]
 
 
 def log(message: str) -> None:

@@ -149,6 +149,25 @@ def step(message: str) -> None:
 # --------------------------------------------------------------------------------------
 
 
+def detector_normalization(preset: Preset) -> tuple[list[float], list[float]]:
+    """
+    The per-channel mean/std the detector was trained with.
+
+    These must come from the model rather than from a sensible-looking default. doctr's DBNet
+    checkpoints are normalised with mean ~0.79 / std ~0.27, nothing like the ImageNet constants
+    an ONNX vision model is usually assumed to want, and feeding it ImageNet-normalised input
+    shifts every pixel by about a full standard deviation. The result is not a crash - it is a
+    detector that quietly finds less text.
+    """
+    from doctr.models import detection
+
+    # pretrained=False still carries the config and avoids re-downloading weights.
+    cfg = getattr(getattr(detection, preset.detector_arch)(pretrained=False), "cfg", None) or {}
+    mean = list(cfg.get("mean", (0.485, 0.456, 0.406)))
+    std = list(cfg.get("std", (0.229, 0.224, 0.225)))
+    return mean, std
+
+
 def export_detector(preset: Preset, work: Path) -> Path:
     """
     Export a DBNet text detector whose single output is a probability map.
@@ -446,10 +465,15 @@ def write_metadata(pack_dir: Path, preset: Preset, base_url: str) -> dict:
         "translator_vocab": "translator_vocab.json",
     }
 
+    detector_mean, detector_std = detector_normalization(preset)
+    log(f"detector normalisation: mean={detector_mean} std={detector_std}")
+
     config = {
         "detector_input_size": preset.detector_size,
         "detector_input_name": "input",
         "detector_output_name": "output",
+        "detector_mean": detector_mean,
+        "detector_std": detector_std,
         "translator_uses_language_token": preset.translator_uses_language_token,
         "translator_decoder_start_token": preset.translator_decoder_start_token,
         **preset.extra_config,

@@ -235,6 +235,12 @@ def dump_translator_vocab(model_id: str, model_dir: Path, target: Path, preset: 
     pieces = tokenizer.convert_ids_to_tokens(list(range(size)))
     pieces = [p if p is not None else "" for p in pieces]
 
+    # The .spm files live beside the export. On a --vocab-only run there is no export, so ask
+    # the tokenizer to write its own files out first.
+    model_dir.mkdir(parents=True, exist_ok=True)
+    if not any(model_dir.glob("*.spm")) and not any(model_dir.glob("*.model")):
+        tokenizer.save_pretrained(str(model_dir))
+
     scores = load_sentencepiece_scores(model_dir)
     if scores:
         fallback = min(scores.values()) - 1.0
@@ -272,7 +278,17 @@ def dump_translator_vocab(model_id: str, model_dir: Path, target: Path, preset: 
 
 
 def load_sentencepiece_scores(model_dir: Path) -> dict[str, float]:
-    """Read `(piece -> log probability)` out of whichever .spm/.model file the export produced."""
+    """
+    Read `(piece -> log probability)` from every SentencePiece model the export produced.
+
+    Marian ships *two*: source.spm covers the input language, target.spm the output one, and its
+    `vocab.json` is the union of both. Reading only the source side leaves roughly half the
+    vocabulary without a real score, which distorts Viterbi whenever the input mixes scripts -
+    a Latin word inside a Japanese bubble is common enough to matter.
+
+    Where a piece appears in both, the source model wins: segmentation only ever runs over input
+    text, so the source distribution is the one that describes it.
+    """
     candidates = sorted(model_dir.glob("*.spm")) + sorted(model_dir.glob("*.model"))
     if not candidates:
         return {}
@@ -282,12 +298,18 @@ def load_sentencepiece_scores(model_dir: Path) -> dict[str, float]:
         log("sentencepiece not installed; cannot read piece scores")
         return {}
 
-    # Marian ships source.spm and target.spm. The source side is what gets segmented.
-    source = next((c for c in candidates if "source" in c.name), candidates[0])
-    processor = spm.SentencePieceProcessor()
-    processor.Load(str(source))
-    log(f"reading scores from {source.name}")
-    return {processor.IdToPiece(i): processor.GetScore(i) for i in range(processor.GetPieceSize())}
+    # Load target first so that source entries overwrite it on collision.
+    ordered = [c for c in candidates if "source" not in c.name]
+    ordered += [c for c in candidates if "source" in c.name]
+
+    scores: dict[str, float] = {}
+    for path in ordered:
+        processor = spm.SentencePieceProcessor()
+        processor.Load(str(path))
+        added = {processor.IdToPiece(i): processor.GetScore(i) for i in range(processor.GetPieceSize())}
+        scores.update(added)
+        log(f"read {len(added)} scores from {path.name}")
+    return scores
 
 
 # --------------------------------------------------------------------------------------
@@ -434,11 +456,31 @@ def write_metadata(pack_dir: Path, preset: Preset, base_url: str) -> dict:
 # --------------------------------------------------------------------------------------
 
 
-def build(preset: Preset, out: Path, base_url: str, skip_quantize: bool) -> None:
+def build(
+    preset: Preset,
+    out: Path,
+    base_url: str,
+    skip_quantize: bool,
+    vocab_only: bool = False,
+) -> None:
     pack_dir = out
     pack_dir.mkdir(parents=True, exist_ok=True)
     work = pack_dir / ".work"
     work.mkdir(exist_ok=True)
+
+    if vocab_only:
+        # Vocabularies are cheap to regenerate and the weights are not; re-exporting a quarter
+        # of a gigabyte to fix a tokenizer detail is not a reasonable edit-test loop.
+        dump_recognizer_vocab(preset.recognizer_model, pack_dir / "recognizer_vocab.json")
+        dump_translator_vocab(
+            preset.translator_model, work / "translator", pack_dir / "translator_vocab.json", preset
+        )
+        if not verify(pack_dir):
+            raise SystemExit("\nVerification failed after re-dumping vocabularies.")
+        write_metadata(pack_dir, preset, base_url)
+        shutil.rmtree(work, ignore_errors=True)
+        print(f"\nVocabularies rebuilt: {pack_dir}")
+        return
 
     detector_raw = export_detector(preset, work)
 
@@ -505,6 +547,12 @@ def main() -> None:
         action="store_true",
         help="keep fp32 weights (bigger and slower, useful when checking quality regressions)",
     )
+    parser.add_argument(
+        "--vocab-only",
+        action="store_true",
+        help="regenerate the vocabularies and metadata of an existing pack, leaving the "
+        "exported weights alone",
+    )
     args = parser.parse_args()
 
     preset = PRESETS[args.preset]
@@ -513,12 +561,14 @@ def main() -> None:
     # default - it would resolve to the phone itself.
     base_url = args.base_url or f"http://{lan_address()}:8770"
 
-    print(f"Building '{preset.pack_id}' -> {out}")
-    print(f"  detector   {preset.detector_arch} @ {preset.detector_size}px")
+    verb = "Rebuilding vocabularies for" if args.vocab_only else "Building"
+    print(f"{verb} '{preset.pack_id}' -> {out}")
+    if not args.vocab_only:
+        print(f"  detector   {preset.detector_arch} @ {preset.detector_size}px")
     print(f"  recogniser {preset.recognizer_model}")
     print(f"  translator {preset.translator_model}")
 
-    build(preset, out, base_url, args.skip_quantize)
+    build(preset, out, base_url, args.skip_quantize, args.vocab_only)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.text.Normalizer
 
 /**
  * Vocabulary file format expected next to a translator model.
@@ -118,8 +119,21 @@ class UnigramTokenizer(private val vocab: SentencePieceVocab) {
         return builder.toString().replace(SPACE_MARKER, ' ').trim()
     }
 
+    /**
+     * NFKC-fold, collapse whitespace, then escape spaces the way SentencePiece does.
+     *
+     * The NFKC pass is not cosmetic. SentencePiece vocabularies are trained on normalised text,
+     * so full-width punctuation is absent from them: `！？～…－（）` all miss and fall through to
+     * `<unk>`, while their ASCII forms are present. The recogniser emits full-width punctuation
+     * because that is what is printed in the bubble, which means without this nearly every line
+     * of dialogue loses its terminal mark.
+     *
+     * Japanese-specific punctuation (`「」`, `、`, `。`, `ー`) is in the vocabulary already and
+     * NFKC leaves it alone, so nothing is lost by folding.
+     */
     private fun normalize(text: String): String {
-        val collapsed = text.trim().replace(WHITESPACE_RUN, " ")
+        val folded = Normalizer.normalize(text, Normalizer.Form.NFKC)
+        val collapsed = folded.trim().replace(WHITESPACE_RUN, " ")
         if (collapsed.isEmpty()) return ""
         return "$SPACE_MARKER" + collapsed.replace(' ', SPACE_MARKER)
     }

@@ -1,0 +1,5 @@
+# Build-time only. Neither belongs in the repo: the venv is ~3 GB of PyTorch, and
+# out/ holds the exported weights, which are hundreds of megabytes per pack.
+.venv/
+out/
+__pycache__/

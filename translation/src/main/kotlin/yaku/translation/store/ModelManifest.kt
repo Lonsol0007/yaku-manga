@@ -70,6 +70,18 @@ data class PackConfig(
     @SerialName("detector_threshold") val detectorThreshold: Float = 0.3f,
     @SerialName("detector_box_expand") val detectorBoxExpand: Float = 0.08f,
     @SerialName("detector_min_area_ratio") val detectorMinAreaRatio: Float = 0.00015f,
+    /**
+     * How far apart two boxes may sit and still be merged, as a multiple of the smaller box.
+     *
+     * Detectors emit one blob per glyph cluster, not per bubble, and Japanese is usually set
+     * vertically - so a line of dialogue arrives as a stack of separate boxes with a full
+     * character of leading between them. Anything below about 1.5 leaves them unmerged, which
+     * feeds the recogniser one glyph at a time: it produces plausible single words, costs one
+     * full inference pass each, and loses the context that makes the translation mean anything.
+     */
+    @SerialName("detector_merge_slop") val detectorMergeSlop: Float = 2f,
+    /** Boxes whose heights differ by more than this are never merged. */
+    @SerialName("detector_merge_max_size_ratio") val detectorMergeMaxSizeRatio: Float = 3f,
     @SerialName("detector_mean") val detectorMean: List<Float> = listOf(0.485f, 0.456f, 0.406f),
     @SerialName("detector_std") val detectorStd: List<Float> = listOf(0.229f, 0.224f, 0.225f),
 

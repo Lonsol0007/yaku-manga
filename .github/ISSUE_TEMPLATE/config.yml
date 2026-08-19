@@ -1,8 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: ❌ Help with Extensions
+  - name: ❌ Extension problems belong upstream
     url: https://mihon.app/docs/faq/browse/extensions
-    about: For extension-related questions/issues
-  - name: 🖥️ Mihon website
-    url: https://mihon.app/
-    about: Guides, troubleshooting, and answers to common questions
+    about: Yaku Manga uses Mihon's extension ecosystem; extension issues are not fork-specific

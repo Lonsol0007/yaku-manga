@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src=".github/assets/logo.jpg" alt="Yaku Manga" width="160">
+
 # Yaku Manga
 
 ### A manga reader that translates on your device, not on someone's server

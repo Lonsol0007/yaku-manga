@@ -474,6 +474,10 @@ def write_metadata(pack_dir: Path, preset: Preset, base_url: str) -> dict:
         "detector_output_name": "output",
         "detector_mean": detector_mean,
         "detector_std": detector_std,
+        # Vertical Japanese arrives as one box per glyph with a full character of leading
+        # between them; anything below ~1.5 leaves the column unmerged. Measured with
+        # page_test.py, which reassembles 15 blobs into 4 bubbles at this value.
+        "detector_merge_slop": 2.0,
         "translator_uses_language_token": preset.translator_uses_language_token,
         "translator_decoder_start_token": preset.translator_decoder_start_token,
         **preset.extra_config,

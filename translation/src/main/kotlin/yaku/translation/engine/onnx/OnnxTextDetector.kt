@@ -121,13 +121,13 @@ class OnnxTextDetector(
                 for (j in i + 1 until working.size) {
                     val a = working[i]
                     val b = working[j]
-                    val slopX = minOf(a.width, b.width) * MERGE_SLOP
-                    val slopY = minOf(a.height, b.height) * MERGE_SLOP
+                    val slopX = minOf(a.width, b.width) * config.detectorMergeSlop
+                    val slopY = minOf(a.height, b.height) * config.detectorMergeSlop
                     if (!a.intersects(b, slopX, slopY)) continue
                     // Only merge similarly-shaped neighbours; a caption strip should not swallow
                     // a nearby sound effect.
                     val ratio = maxOf(a.height, b.height) / minOf(a.height, b.height).coerceAtLeast(1f)
-                    if (ratio > MERGE_MAX_SIZE_RATIO) continue
+                    if (ratio > config.detectorMergeMaxSizeRatio) continue
                     working[i] = a.union(b)
                     working.removeAt(j)
                     merged = true
@@ -145,8 +145,6 @@ class OnnxTextDetector(
     override fun close() = model.close()
 
     private companion object {
-        const val MERGE_SLOP = 0.35f
-        const val MERGE_MAX_SIZE_RATIO = 3f
         const val ROW_BUCKET = 64f
     }
 }

@@ -110,6 +110,11 @@ this application hosts zero content.
 
 ## License
 
+The bundled Poppins typeface is by Indian Type Foundry, Jonny Pinhorn and Ninad Kale, used
+under the SIL Open Font License 1.1 - see [LICENSE-Poppins.txt](LICENSE-Poppins.txt). The OFL
+permits bundling and redistribution inside an application; the font files are unmodified.
+
+
 <pre>
 Copyright © 2015 Javier Tomás
 Copyright © 2024 Mihon Open Source Project

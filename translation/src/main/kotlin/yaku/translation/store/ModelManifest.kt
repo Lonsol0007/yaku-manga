@@ -87,4 +87,10 @@ data class PackConfig(
     @SerialName("translator_unk_token") val translatorUnkToken: String = "<unk>",
     /** NLLB-style models need the target language as the first decoder token. */
     @SerialName("translator_uses_language_token") val translatorUsesLanguageToken: Boolean = true,
+    /**
+     * Token the decoder is primed with. NLLB and M2M start from the EOS token, which is the
+     * fallback; Marian/opus-MT starts from the pad token instead. Priming with the wrong one
+     * yields fluent nonsense rather than an obvious failure, so it is worth setting explicitly.
+     */
+    @SerialName("translator_decoder_start_token") val translatorDecoderStartToken: String? = null,
 )

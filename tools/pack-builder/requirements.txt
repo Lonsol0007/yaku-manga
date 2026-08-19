@@ -1,0 +1,14 @@
+# Desktop-only build dependencies for producing translation packs.
+# Nothing here ships in the APK - the phone only ever sees the exported .onnx and .json files.
+
+torch>=2.2
+transformers>=4.40
+optimum[exporters]>=1.20
+onnx>=1.16
+onnxruntime>=1.18
+sentencepiece>=0.2
+python-doctr[torch]>=0.8
+
+# manga-ocr's tokenizer is BertJapanese, which needs a Japanese morphological analyser
+fugashi>=1.3
+unidic-lite>=1.0.8

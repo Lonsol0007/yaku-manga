@@ -34,6 +34,9 @@ class OnnxTranslator(
 
     private val eosId = tokenizer.idOf(config.translatorEosToken) ?: tokenizer.eosId
     private val bosId = tokenizer.idOf(config.translatorBosToken) ?: tokenizer.bosId
+    private val decoderStartId = config.translatorDecoderStartToken
+        ?.let { tokenizer.idOf(it) }
+        ?: eosId
 
     fun translate(
         text: String,
@@ -81,7 +84,7 @@ class OnnxTranslator(
         target: TranslationLanguage,
     ): String {
         val ids = ArrayList<Long>(config.translatorMaxTokens)
-        ids.add(eosId.toLong()) // decoder_start_token_id for NLLB/M2M is </s>
+        ids.add(decoderStartId.toLong())
         if (config.translatorUsesLanguageToken) {
             val languageId = tokenizer.idOf(target.modelCode)
             if (languageId != null) ids.add(languageId.toLong()) else ids.add(bosId.toLong())

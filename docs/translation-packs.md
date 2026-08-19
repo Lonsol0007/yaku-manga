@@ -19,6 +19,14 @@ request, verified by SHA-256, and stored under the app's private files directory
 Copying that directory into place by hand works too — the app reads `pack.json` and never contacts
 the network for a pack that is already installed.
 
+## Building a pack
+
+Use [`tools/pack-builder`](../tools/pack-builder/README.md), which exports the models, quantises
+them, dumps both vocabularies in the formats below, verifies every graph loads with the tensor
+names the app resolves, and emits the JSON described here. Building by hand is possible but the
+verification step is what catches the failure this format is most prone to - a tensor name that
+changed between Optimum versions, which otherwise surfaces as an exception inside the reader.
+
 ## Manifest format
 
 Settings takes a URL returning JSON in this shape. Nothing is fetched until you enter one.
@@ -69,6 +77,7 @@ on), so most stock exports from Optimum need no configuration at all.
 | `recognizer_mean` / `recognizer_std` | `0.5` | Per-channel normalisation. |
 | `translator_max_tokens` | `128` | Decode cap per translated string. |
 | `translator_uses_language_token` | `true` | NLLB/M2M style: prepend the language token. Set `false` for opus-MT. |
+| `translator_decoder_start_token` | EOS token | Token the decoder is primed with. NLLB/M2M use `</s>`; Marian/opus-MT use `<pad>`. |
 | `translator_bos_token` etc. | `<s>`, `</s>`, `<pad>`, `<unk>` | Special token strings, looked up in the vocab. |
 
 ## Vocabulary formats

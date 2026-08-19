@@ -28,10 +28,10 @@ if (Config.includeTelemetry) {
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 
 android {
-    namespace = "eu.kanade.tachiyomi"
+    namespace = "yaku"
 
     defaultConfig {
-        applicationId = "app.mihon"
+        applicationId = "app.yaku"
 
         versionCode = 29
         versionName = "0.20.4"
@@ -219,6 +219,7 @@ dependencies {
     implementation(projects.presentationCore)
     implementation(projects.presentationWidget)
     implementation(projects.telemetry)
+    implementation(projects.translation)
 
     // Compose
     implementation(libs.androidx.activity.compose)

@@ -4,8 +4,6 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import eu.kanade.tachiyomi.data.download.DownloadManager
-import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,10 +17,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import tachiyomi.domain.source.model.StubSource
-import tachiyomi.domain.source.repository.StubSourceRepository
-import tachiyomi.domain.source.service.SourceManager
-import tachiyomi.source.local.LocalSource
+import yaku.data.download.DownloadManager
+import yaku.domain.source.model.StubSource
+import yaku.domain.source.repository.StubSourceRepository
+import yaku.domain.source.service.SourceManager
+import yaku.extension.ExtensionManager
+import yaku.source.local.LocalSource
 import java.util.concurrent.ConcurrentHashMap
 
 @Inject

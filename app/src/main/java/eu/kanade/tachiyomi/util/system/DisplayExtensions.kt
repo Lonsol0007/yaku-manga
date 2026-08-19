@@ -5,8 +5,8 @@ import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
 import android.view.View
-import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.domain.ui.model.TabletUiMode
+import yaku.domain.ui.UiPreferences
+import yaku.domain.ui.model.TabletUiMode
 
 private const val TABLET_UI_REQUIRED_SCREEN_WIDTH_DP = 720
 

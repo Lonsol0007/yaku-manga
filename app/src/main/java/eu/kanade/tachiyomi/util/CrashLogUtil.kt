@@ -3,9 +3,6 @@ package eu.kanade.tachiyomi.util
 import android.content.Context
 import android.os.Build
 import dev.zacsweers.metro.Inject
-import eu.kanade.domain.base.BasePreferences
-import eu.kanade.tachiyomi.BuildConfig
-import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.WebViewUtil
@@ -15,8 +12,11 @@ import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.offsetAt
 import kotlinx.datetime.toLocalDateTime
-import tachiyomi.core.common.util.lang.withNonCancellableContext
-import tachiyomi.core.common.util.lang.withUIContext
+import yaku.BuildConfig
+import yaku.core.common.util.lang.withNonCancellableContext
+import yaku.core.common.util.lang.withUIContext
+import yaku.domain.base.BasePreferences
+import yaku.extension.ExtensionManager
 import kotlin.time.Clock
 
 @Inject

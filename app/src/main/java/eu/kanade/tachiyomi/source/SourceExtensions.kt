@@ -1,11 +1,11 @@
 package eu.kanade.tachiyomi.source
 
 import android.content.Context
-import mihon.app.di.appGraph
-import tachiyomi.domain.source.model.StubSource
-import tachiyomi.source.local.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import yaku.app.di.appGraph
+import yaku.domain.source.model.StubSource
+import yaku.source.local.isLocal
 
 fun Source.getNameForMangaInfo(): String {
     val preferences = Injekt.get<Context>().appGraph.sourcePreferences

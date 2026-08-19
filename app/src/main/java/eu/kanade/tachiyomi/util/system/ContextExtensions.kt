@@ -15,16 +15,16 @@ import androidx.appcompat.view.ContextThemeWrapper
 import androidx.core.content.getSystemService
 import androidx.core.net.toUri
 import com.hippo.unifile.UniFile
-import eu.kanade.domain.ui.model.ThemeMode
-import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.ui.base.delegate.ThemingDelegate
 import eu.kanade.tachiyomi.util.lang.truncateCenter
 import logcat.LogPriority
-import mihon.app.di.appGraph
 import rikka.shizuku.ShizukuProvider
-import tachiyomi.core.common.i18n.stringResource
-import tachiyomi.core.common.util.system.logcat
-import tachiyomi.i18n.MR
+import yaku.R
+import yaku.app.di.appGraph
+import yaku.core.common.i18n.stringResource
+import yaku.core.common.util.system.logcat
+import yaku.domain.ui.model.ThemeMode
+import yaku.i18n.MR
+import yaku.ui.base.delegate.ThemingDelegate
 import java.io.File
 
 /**

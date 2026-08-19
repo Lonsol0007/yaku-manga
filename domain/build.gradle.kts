@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "tachiyomi.domain"
+    namespace = "yaku.domain"
 }
 
 kotlin {

@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "tachiyomi.presentation.widget"
+    namespace = "yaku.presentation.widget"
 }
 
 dependencies {

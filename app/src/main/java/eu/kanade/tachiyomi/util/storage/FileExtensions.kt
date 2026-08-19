@@ -3,7 +3,7 @@ package eu.kanade.tachiyomi.util.storage
 import android.content.Context
 import android.net.Uri
 import androidx.core.content.FileProvider
-import eu.kanade.tachiyomi.BuildConfig
+import yaku.BuildConfig
 import java.io.File
 
 val Context.cacheImageDir: File

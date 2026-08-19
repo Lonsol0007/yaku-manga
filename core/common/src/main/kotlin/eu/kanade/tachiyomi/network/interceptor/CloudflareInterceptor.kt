@@ -17,8 +17,8 @@ import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.Jsoup
-import tachiyomi.core.common.i18n.stringResource
-import tachiyomi.i18n.MR
+import yaku.core.common.i18n.stringResource
+import yaku.i18n.MR
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 

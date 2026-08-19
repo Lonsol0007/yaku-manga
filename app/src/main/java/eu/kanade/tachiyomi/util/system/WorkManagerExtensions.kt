@@ -6,7 +6,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import kotlinx.coroutines.delay
 import logcat.LogPriority
-import tachiyomi.core.common.util.system.logcat
+import yaku.core.common.util.system.logcat
 import kotlin.time.Duration.Companion.seconds
 
 val Context.workManager: WorkManager

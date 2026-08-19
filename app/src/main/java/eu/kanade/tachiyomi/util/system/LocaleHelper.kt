@@ -2,9 +2,9 @@ package eu.kanade.tachiyomi.util.system
 
 import android.content.Context
 import androidx.core.os.LocaleListCompat
-import eu.kanade.tachiyomi.ui.browse.source.SourcesViewModel
-import tachiyomi.core.common.i18n.stringResource
-import tachiyomi.i18n.MR
+import yaku.core.common.i18n.stringResource
+import yaku.i18n.MR
+import yaku.ui.browse.source.SourcesViewModel
 import java.util.Locale
 
 /**

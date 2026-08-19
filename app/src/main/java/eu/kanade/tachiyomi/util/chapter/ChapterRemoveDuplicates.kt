@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.util.chapter
 
-import tachiyomi.domain.chapter.model.Chapter
+import yaku.domain.chapter.model.Chapter
 
 /**
  * Returns a copy of the list with duplicate chapters removed

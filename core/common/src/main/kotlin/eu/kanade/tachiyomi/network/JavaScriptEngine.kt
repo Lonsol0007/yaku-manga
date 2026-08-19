@@ -5,7 +5,7 @@ import app.cash.quickjs.QuickJs
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import tachiyomi.core.common.util.lang.withIOContext
+import yaku.core.common.util.lang.withIOContext
 
 /**
  * Util for evaluating JavaScript in sources.

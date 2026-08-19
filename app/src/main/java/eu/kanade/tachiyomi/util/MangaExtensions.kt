@@ -1,11 +1,11 @@
 package eu.kanade.tachiyomi.util
 
-import eu.kanade.domain.manga.interactor.UpdateManga
-import eu.kanade.domain.manga.model.toSManga
-import eu.kanade.tachiyomi.data.cache.CoverCache
-import tachiyomi.domain.manga.model.Manga
-import tachiyomi.source.local.image.LocalCoverManager
-import tachiyomi.source.local.isLocal
+import yaku.data.cache.CoverCache
+import yaku.domain.manga.interactor.UpdateManga
+import yaku.domain.manga.model.Manga
+import yaku.domain.manga.model.toSManga
+import yaku.source.local.image.LocalCoverManager
+import yaku.source.local.isLocal
 import java.io.InputStream
 import kotlin.time.Clock
 

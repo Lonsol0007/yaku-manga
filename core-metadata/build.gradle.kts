@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "tachiyomi.core.metadata"
+    namespace = "yaku.core.metadata"
 }
 
 dependencies {

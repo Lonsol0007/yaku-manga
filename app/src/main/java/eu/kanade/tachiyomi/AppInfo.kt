@@ -1,6 +1,6 @@
-package eu.kanade.tachiyomi
+package yaku
 
-import tachiyomi.core.common.util.system.ImageUtil
+import yaku.core.common.util.system.ImageUtil
 
 /**
  * Used by extensions.

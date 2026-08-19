@@ -10,7 +10,7 @@ plugins {
 
 kotlin {
     android {
-        namespace = "tachiyomi.i18n"
+        namespace = "yaku.i18n"
 
         // TODO(antsy): Remove when https://youtrack.jetbrains.com/issue/KT-83319 is resolved
         withHostTest { }
@@ -38,5 +38,5 @@ androidComponents {
 }
 
 multiplatformResources {
-    resourcesPackage.set("tachiyomi.i18n")
+    resourcesPackage.set("yaku.i18n")
 }

@@ -11,7 +11,7 @@ import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.suspendCancellableCoroutine
 import logcat.LogPriority
-import tachiyomi.core.common.util.system.logcat
+import yaku.core.common.util.system.logcat
 import kotlin.coroutines.resume
 
 object WebViewUtil {

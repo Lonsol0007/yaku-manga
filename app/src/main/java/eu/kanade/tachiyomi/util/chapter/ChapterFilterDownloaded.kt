@@ -1,9 +1,9 @@
 package eu.kanade.tachiyomi.util.chapter
 
-import eu.kanade.tachiyomi.data.download.DownloadCache
-import tachiyomi.domain.chapter.model.Chapter
-import tachiyomi.domain.manga.model.Manga
-import tachiyomi.source.local.isLocal
+import yaku.data.download.DownloadCache
+import yaku.domain.chapter.model.Chapter
+import yaku.domain.manga.model.Manga
+import yaku.source.local.isLocal
 
 /**
  * Returns a copy of the list with not downloaded chapters removed.

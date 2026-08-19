@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">Mihon</string>
+    <string name="app_name" translatable="false">Yaku Manga</string>
 
     <!-- Generic strings -->
     <string name="on">On</string>
@@ -216,6 +216,24 @@
     <string name="pref_appearance_summary">Theme, date &amp; time format</string>
     <string name="pref_library_summary">Categories, global update, chapter swipe</string>
     <string name="pref_reader_summary">Reading mode, display, navigation</string>
+
+    <!-- Yaku Manga: on-device translation -->
+    <string name="pref_category_translation">Translation</string>
+    <string name="pref_translation_summary">On-device translation, model packs</string>
+    <string name="pref_translation_info">Translation runs entirely on this device. Pages, recognised text and translations are never uploaded. Model packs are the only thing downloaded, and only when you ask for one.</string>
+    <string name="pref_translation_enabled">Translate pages</string>
+    <string name="pref_translation_enabled_summary">Overlay translated text while reading. Needs a downloaded model pack.</string>
+    <string name="pref_translation_languages">Languages</string>
+    <string name="pref_translation_source_language">Translate from</string>
+    <string name="pref_translation_target_language">Translate to</string>
+    <string name="pref_translation_models">Model packs</string>
+    <string name="pref_translation_active_pack">Active pack</string>
+    <string name="pref_translation_no_packs">No packs installed</string>
+    <string name="pref_translation_manifest_url">Pack manifest URL</string>
+    <string name="pref_translation_manifest_url_summary">Where to look for downloadable packs. Leave empty to use only packs you copy in yourself.</string>
+    <string name="pref_translation_wifi_only">Download packs on Wi-Fi only</string>
+    <string name="pref_translation_browse_packs">Browse available packs</string>
+    <string name="pref_translation_available_packs">Available packs</string>
     <string name="pref_downloads_summary">Automatic download, download ahead</string>
     <string name="pref_tracking_summary">One-way progress sync, enhanced sync</string>
     <string name="pref_browse_summary">Sources, extensions, global search</string>

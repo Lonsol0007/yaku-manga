@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "mihon.core.metro"
+    namespace = "yaku.core.metro"
 }
 
 dependencies {

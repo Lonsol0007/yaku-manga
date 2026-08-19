@@ -1,74 +1,117 @@
 <div align="center">
 
-<a href="https://mihon.app">
-    <img src="./.github/assets/logo.png" alt="Mihon logo" title="Mihon logo" width="80"/>
-</a>
+# Yaku Manga
 
-# Mihon [App](#)
+### A manga reader that translates on your device, not on someone's server
 
-### Full-featured reader
-Discover and read manga, webtoons, comics, and more – easier than ever on your Android device.
-
-[![Discord server](https://img.shields.io/discord/1195734228319617024.svg?label=&labelColor=6A7EC2&color=7389D8&logo=discord&logoColor=FFFFFF)](https://discord.gg/mihon)
-[![GitHub downloads](https://img.shields.io/github/downloads/mihonapp/mihon/total?label=downloads&labelColor=27303D&color=0D1117&logo=github&logoColor=FFFFFF&style=flat)](https://mihon.app/download)
-
-[![CI](https://img.shields.io/github/actions/workflow/status/mihonapp/mihon/build.yml?labelColor=27303D)](https://github.com/mihonapp/mihon/actions/workflows/build_push.yml)
-[![License: Apache-2.0](https://img.shields.io/github/license/mihonapp/mihon?labelColor=27303D&color=0877d2)](/LICENSE)
-[![Translation status](https://img.shields.io/weblate/progress/mihon?labelColor=27303D&color=946300)](https://hosted.weblate.org/engage/mihon/)
-
-## Download
-
-[![Mihon Stable](https://img.shields.io/github/release/mihonapp/mihon.svg?maxAge=3600&label=Stable&labelColor=06599d&color=043b69)](https://mihon.app/download)
-[![Mihon Beta](https://img.shields.io/github/v/release/mihonapp/mihon-preview.svg?maxAge=3600&label=Beta&labelColor=2c2c47&color=1c1c39)](https://mihon.app/download)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-0877d2?labelColor=27303D)](/LICENSE)
+[![Fork of Mihon](https://img.shields.io/badge/fork%20of-Mihon-27303D?labelColor=27303D)](https://github.com/mihonapp/mihon)
 
 *Requires Android 8.0 or higher.*
 
-## Features
+</div>
 
-<div align="left">
+## What this is
+
+Yaku Manga is a fork of [Mihon](https://github.com/mihonapp/mihon) built around one addition:
+**machine translation that runs entirely on the phone.** Pages are detected, read and translated
+by ONNX models stored in the app's private directory. No page image, no recognised text and no
+translation ever leaves the device.
+
+The rest of the app is Mihon — its library, sources, downloads, trackers and reader are unchanged
+in behaviour, and the extension API is deliberately untouched so existing extensions keep working.
+
+## How translation works
+
+```
+page bitmap ─▶ text detection ─▶ text recognition ─▶ translation ─▶ text drawn onto the page
+               (DBNet-class)      (manga-ocr-class)   (NLLB / opus-MT)
+```
+
+Every stage is an ONNX graph executed locally by ONNX Runtime. The translated text is composited
+into the page bitmap before the viewer ever sees it, so zoom, pan, double-page splitting and
+border cropping all keep working without knowing translation happened.
+
+### Models are not bundled
+
+The APK ships with no weights. A usable pack is a few hundred megabytes, and which one is right
+depends on the language pair you read, so packs are downloaded on request and verified by SHA-256
+before use. Point the app at a manifest URL in settings, or drop a pack directly into the app's
+files directory to keep it fully offline. See [`docs/translation-packs.md`](docs/translation-packs.md)
+for the manifest format.
+
+### Privacy posture
+
+* No telemetry in a default build. Crash reporting is a compile-time opt-in (`-Pinclude-telemetry`)
+  and is additionally gated on a signing certificate, so unofficial builds never report.
+* No network access for translation. Model downloads are the only requests the feature ever makes,
+  and only when you ask for one.
+* Models live in app-private storage and are removed when the app is uninstalled.
+
+## Features inherited from Mihon
 
 * Local reading of content.
 * A configurable reader with multiple viewers, reading directions and other settings.
-* Tracker support: [MangaBaka](https://mangabaka.org), [MyAnimeList](https://myanimelist.net/), [AniList](https://anilist.co/), [Kitsu](https://kitsu.app/), [MangaUpdates](https://mangaupdates.com), [Shikimori](https://shikimori.one), [Bangumi](https://bgm.tv/), and [Hikka](https://hikka.io/) support.
+* Tracker support: [MangaBaka](https://mangabaka.org), [MyAnimeList](https://myanimelist.net/),
+  [AniList](https://anilist.co/), [Kitsu](https://kitsu.app/), [MangaUpdates](https://mangaupdates.com),
+  [Shikimori](https://shikimori.one), [Bangumi](https://bgm.tv/), and [Hikka](https://hikka.io/).
 * Categories to organize your library.
 * Light and dark themes.
-* Schedule updating your library for new chapters.
-* Create backups locally to read offline or to your desired cloud service.
-* Plus much more...
+* Scheduled library updates.
+* Local and cloud backups.
 
-</div>
+## Relationship to Mihon
 
-## Contributing
+This is an independent fork and is **not affiliated with, endorsed by, or supported by the Mihon
+project**. Please do not report Yaku Manga issues to Mihon, and do not ask for support in Mihon's
+Discord.
 
-[Code of conduct](./CODE_OF_CONDUCT.md) · [Contributing guide](./CONTRIBUTING.md)
+Yaku Manga is distributed under the Apache License 2.0, the same licence as its upstream. As
+required by section 4(b) of that licence, the notable changes made to the original work are:
 
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+* All application package namespaces renamed from `eu.kanade.*`, `mihon.*` and `tachiyomi.*` to
+  `yaku.*`; application id changed to `app.yaku`.
+* Application name, branding and update endpoints changed.
+* Added the `:translation` module and its integration into the reader page pipeline.
+* Telemetry package/certificate allowlist retargeted away from Mihon's.
 
-Before reporting a new issue, take a look at the [FAQ](https://mihon.app/docs/faq/general), the [changelog](https://mihon.app/changelogs/) and the already opened [issues](https://github.com/mihonapp/mihon/issues); if you got any questions, join our [Discord server](https://discord.gg/mihon).
+**Not renamed, on purpose:** `eu.kanade.tachiyomi.source`, `eu.kanade.tachiyomi.network`,
+`eu.kanade.tachiyomi.util` and the `tachiyomi.extension*` manifest metadata keys. Extensions are
+separate APKs compiled against those exact names and resolve them from the host app's classloader —
+renaming them would break every existing extension.
 
+## Building
 
-### Repositories
+```bash
+./gradlew assembleDebug
+```
 
-[![mihonapp/website - GitHub](https://github-stats-extended.vercel.app/api/pin/?username=mihonapp&repo=website&bg_color=161B22&text_color=c9d1d9&title_color=0877d2&icon_color=0877d2&border_radius=8&hide_border=true&description_lines_count=2)](https://github.com/mihonapp/website/)
-[![mihonapp/bitmap.kt - GitHub](https://github-stats-extended.vercel.app/api/pin/?username=mihonapp&repo=bitmap.kt&bg_color=161B22&text_color=c9d1d9&title_color=0877d2&icon_color=0877d2&border_radius=8&hide_border=true&description_lines_count=2)](https://github.com/mihonapp/bitmap.kt/)
+Requires JDK 21 and the Android SDK (compileSdk 37). Optional Gradle properties:
 
-### Credits
+| Property | Effect |
+|---|---|
+| `-Pinclude-telemetry` | Compiles in Firebase Crashlytics. Off by default. |
+| `-Penable-updater` | Compiles in the in-app updater. Off by default. |
 
-Thank you to all the people who have contributed!
+## Credits
+
+Yaku Manga exists because of the work of the Mihon contributors and, before them, Tachiyomi's.
 
 <a href="https://github.com/mihonapp/mihon/graphs/contributors">
     <img src="https://contrib.rocks/image?repo=mihonapp/mihon" alt="Mihon app contributors" title="Mihon app contributors" width="800"/>
 </a>
 
-### Disclaimer
+## Disclaimer
 
-The developer(s) of this application does not have any affiliation with the content providers available, and this application hosts zero content.
+The developers of this application have no affiliation with the content providers available, and
+this application hosts zero content.
 
-### License
+## License
 
 <pre>
 Copyright © 2015 Javier Tomás
 Copyright © 2024 Mihon Open Source Project
+Copyright © 2026 Yaku Manga contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -82,5 +125,3 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 </pre>
-
-</div>

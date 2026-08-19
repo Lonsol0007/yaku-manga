@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "tachiyomi.presentation.core"
+    namespace = "yaku.presentation.core"
 }
 
 kotlin {

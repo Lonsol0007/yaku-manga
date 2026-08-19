@@ -6,7 +6,7 @@ import android.content.Context
 import android.os.Build
 import androidx.core.content.getSystemService
 import logcat.LogPriority
-import tachiyomi.core.common.util.system.logcat
+import yaku.core.common.util.system.logcat
 
 object DeviceUtil {
 

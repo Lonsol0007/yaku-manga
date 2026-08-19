@@ -21,9 +21,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import dev.zacsweers.metrox.viewmodel.LocalMetroViewModelFactory
-import eu.kanade.presentation.theme.TachiyomiTheme
-import eu.kanade.tachiyomi.R
-import mihon.app.di.appGraph
+import yaku.R
+import yaku.app.di.appGraph
+import yaku.presentation.theme.TachiyomiTheme
 
 inline fun ComponentActivity.setComposeContent(
     parent: CompositionContext? = null,

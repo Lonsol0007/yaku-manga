@@ -3,7 +3,7 @@ package eu.kanade.tachiyomi.util.system
 import android.content.Context
 import android.widget.Toast
 import dev.icerock.moko.resources.StringResource
-import tachiyomi.core.common.i18n.stringResource
+import yaku.core.common.i18n.stringResource
 
 /**
  * Display a toast in this context.

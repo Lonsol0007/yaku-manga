@@ -9,7 +9,19 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-0877d2?labelColor=27303D)](/LICENSE)
 [![Fork of Mihon](https://img.shields.io/badge/fork%20of-Mihon-27303D?labelColor=27303D)](https://github.com/mihonapp/mihon)
 
+## Download
+
+### [**Download the app**](https://github.com/Lonsol0007/yaku-manga/releases/latest)
+
+Grab `yaku-manga-1.0-arm64-v8a.apk` unless you know you need otherwise — it covers essentially
+every phone made in the last several years.
+
 *Requires Android 8.0 or higher.*
+
+Translation model packs are a **separate, optional download**, published at
+[packs-v1](https://github.com/Lonsol0007/yaku-manga/releases/tag/packs-v1). You do not need them
+to install or use the app, and the app fetches them for you from inside Settings — see
+[Installing a translation pack](#installing-a-translation-pack).
 
 </div>
 

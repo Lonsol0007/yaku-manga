@@ -1,8 +1,11 @@
 name: Release
+
+# Manual only. This workflow signs with SIGNING_KEY / KEY_STORE_PASSWORD / ALIAS /
+# KEY_PASSWORD, none of which are set on this repository, so firing it automatically on a
+# v* tag would fail every release the moment the tag was pushed. Add those secrets first,
+# then run it from the Actions tab.
 on:
-  push:
-    tags:
-      - v*
+  workflow_dispatch:
 
 env:
   MIHON_GITHUB_RELEASE: true

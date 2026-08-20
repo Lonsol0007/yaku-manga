@@ -126,7 +126,10 @@ object HomeScreen : Screen() {
                         AnimatedContent(
                             targetState = tabNavigator.current,
                             transitionSpec = {
-                                materialFadeThroughIn(initialScale = 1f, durationMillis = TabFadeDuration) togetherWith
+                                // Material fade-through is a cross-fade *plus* a slight scale-up; upstream
+                                // pinned initialScale to 1f, which leaves only the cross-fade. Restoring the
+                                // scale gives the switch a sense of direction instead of a flat dissolve.
+                                materialFadeThroughIn(durationMillis = TabFadeDuration) togetherWith
                                     materialFadeThroughOut(durationMillis = TabFadeDuration)
                             },
                             label = "tabContent",

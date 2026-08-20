@@ -33,8 +33,10 @@ android {
     defaultConfig {
         applicationId = "app.yaku"
 
-        versionCode = 29
-        versionName = "0.20.4"
+        // app.yaku has never been published, so this is genuinely its first version.
+        // Inheriting Mihon's 29 would leave no room to ever renumber.
+        versionCode = 1
+        versionName = "1.0"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getLatestCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getLatestCommitSha()}\"")
@@ -177,6 +179,12 @@ android {
     lint {
         abortOnError = false
         checkReleaseBuilds = false
+
+        // androidx.compose.ui.lint.ConfigurationScreenWidthHeightDetector throws
+        // "Unexpected owner function: null" and takes the whole analysis down with it, so
+        // nothing else gets checked either. The failure is in the detector, not in the code
+        // it was reading.
+        disable += "ConfigurationScreenWidthHeight"
     }
 }
 

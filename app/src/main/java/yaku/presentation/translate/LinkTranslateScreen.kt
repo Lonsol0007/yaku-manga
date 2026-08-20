@@ -1,5 +1,14 @@
 package yaku.presentation.translate
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,6 +26,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -54,7 +67,7 @@ fun LinkTranslateScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
+            item(key = "controls") {
                 Column(
                     modifier = Modifier.padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -76,20 +89,42 @@ fun LinkTranslateScreen(
                         ) {
                             Text(stringResource(MR.strings.action_translate))
                         }
-                        if (state.isWorking) {
+                        // Cancel exists only while a run is in flight, so it grows in beside the
+                        // primary button rather than popping into place.
+                        AnimatedVisibility(
+                            visible = state.isWorking,
+                            enter = fadeIn() + expandHorizontally(),
+                            exit = fadeOut() + shrinkHorizontally(),
+                        ) {
                             OutlinedButton(onClick = onCancel) {
                                 Text(stringResource(MR.strings.action_cancel))
                             }
                         }
                     }
 
-                    Progress(state.stage)
-                    state.error?.let { ErrorMessage(it) }
+                    AnimatedVisibility(
+                        visible = state.isWorking,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
+                    ) {
+                        Progress(state.stage)
+                    }
+
+                    ErrorMessage(state.error)
                 }
             }
 
             items(state.pages, key = { it.file.path }) { page ->
-                Card(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        // Pages land one at a time over many seconds. Without this they snap in
+                        // and shove whatever is below them down mid-read.
+                        .animateItem(
+                            fadeInSpec = spring(stiffness = 200f),
+                            placementSpec = spring(stiffness = 200f),
+                        ),
+                ) {
                     AsyncImage(
                         model = page.file,
                         contentDescription = null,
@@ -112,23 +147,45 @@ fun LinkTranslateScreen(
 
 @Composable
 private fun Progress(stage: Stage) {
-    when (stage) {
-        Stage.Idle -> Unit
-        Stage.Fetching -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(MR.strings.translate_link_fetching))
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        }
-        is Stage.Translating -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(stringResource(MR.strings.translate_link_translating))
-                Text("${stage.done} / ${stage.total}")
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        val translating = stage as? Stage.Translating
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(
+                    if (translating == null) {
+                        MR.strings.translate_link_fetching
+                    } else {
+                        MR.strings.translate_link_translating
+                    },
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            AnimatedVisibility(visible = translating != null, enter = fadeIn(), exit = fadeOut()) {
+                Text(
+                    text = translating?.let { "${it.done} / ${it.total}" }.orEmpty(),
+                    style = MaterialTheme.typography.labelLarge,
+                )
             }
+        }
+
+        if (translating == null) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        } else {
+            // Animated rather than stepped: a page takes seconds, and a bar that jumps once per
+            // page and then sits still reads as stalled.
+            val target = if (translating.total == 0) {
+                0f
+            } else {
+                translating.done.toFloat() / translating.total
+            }
+            val progress by animateFloatAsState(targetValue = target, label = "translateProgress")
             LinearProgressIndicator(
-                progress = { if (stage.total == 0) 0f else stage.done.toFloat() / stage.total },
+                progress = { progress },
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -136,16 +193,35 @@ private fun Progress(stage: Stage) {
 }
 
 @Composable
-private fun ErrorMessage(error: Error) {
-    val message = when (error) {
-        Error.BadUrl -> stringResource(MR.strings.translate_link_error_bad_url)
-        Error.NoImages -> stringResource(MR.strings.translate_link_error_no_images)
-        Error.AllFailed -> stringResource(MR.strings.translate_link_error_all_failed)
-        Error.TranslationOff -> stringResource(MR.strings.translate_link_error_disabled)
-        is Error.UnsupportedType ->
-            stringResource(MR.strings.translate_link_error_unsupported, error.contentType)
-        is Error.Http -> stringResource(MR.strings.translate_link_error_http, error.code)
-        is Error.Unreachable -> stringResource(MR.strings.translate_link_error_unreachable, error.reason)
+private fun ErrorMessage(error: Error?) {
+    // Keep the last error after it clears, so the text stays put while the row collapses instead
+    // of blanking on the first frame of the exit animation. Keying remember on `error` would do
+    // the opposite - it would drop the message precisely when it is still needed.
+    var remembered by remember { mutableStateOf<Error?>(null) }
+    if (error != null) remembered = error
+    AnimatedVisibility(
+        visible = error != null,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically(),
+    ) {
+        remembered?.let {
+            Text(
+                text = messageFor(it),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
     }
-    Text(text = message, color = MaterialTheme.colorScheme.error)
+}
+
+@Composable
+private fun messageFor(error: Error): String = when (error) {
+    Error.BadUrl -> stringResource(MR.strings.translate_link_error_bad_url)
+    Error.NoImages -> stringResource(MR.strings.translate_link_error_no_images)
+    Error.AllFailed -> stringResource(MR.strings.translate_link_error_all_failed)
+    Error.TranslationOff -> stringResource(MR.strings.translate_link_error_disabled)
+    is Error.UnsupportedType ->
+        stringResource(MR.strings.translate_link_error_unsupported, error.contentType)
+    is Error.Http -> stringResource(MR.strings.translate_link_error_http, error.code)
+    is Error.Unreachable -> stringResource(MR.strings.translate_link_error_unreachable, error.reason)
 }

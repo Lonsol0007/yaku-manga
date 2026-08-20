@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "packs": [
+    {
+      "id": "ja-en-base",
+      "name": "Japanese to English (base)",
+      "description": "DBNet detector + manga-ocr recogniser + opus-MT ja-en, int8",
+      "source_languages": [
+        "ja"
+      ],
+      "target_languages": [
+        "en"
+      ],
+      "config": {
+        "detector_input_size": 1024,
+        "detector_input_name": "input",
+        "detector_output_name": "output",
+        "detector_mean": [
+          0.798,
+          0.785,
+          0.772
+        ],
+        "detector_std": [
+          0.264,
+          0.2749,
+          0.287
+        ],
+        "detector_merge_slop": 2.0,
+        "translator_uses_language_token": false,
+        "translator_decoder_start_token": "<pad>"
+      },
+      "detector": {
+        "name": "detector.onnx",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/67b56797de77-detector.onnx",
+        "size_bytes": 4476296,
+        "sha256": "67b56797de776517feeb1649becfefc5e7b51b4a59f79a8815c0e9974d33f57a"
+      },
+      "recognizer_encoder": {
+        "name": "recognizer_encoder.onnx",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/86d4a9b43b01-recognizer_encoder.onnx",
+        "size_bytes": 86967767,
+        "sha256": "86d4a9b43b0171d912ed009e411f583710a4d35a5c95f1453f1f0ad4aae2232e"
+      },
+      "recognizer_decoder": {
+        "name": "recognizer_decoder.onnx",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/e72cc2614f48-recognizer_decoder.onnx",
+        "size_bytes": 29627936,
+        "sha256": "e72cc2614f48ea6691f9a83ff645b93cce8388bc23fa834a76765de0d293fff0"
+      },
+      "recognizer_vocab": {
+        "name": "recognizer_vocab.json",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/edee83dd4484-recognizer_vocab.json",
+        "size_bytes": 42506,
+        "sha256": "edee83dd448425ef4de06704e0bc4e18ee8970a502a4b3a0913bd6e7085dc951"
+      },
+      "translator_encoder": {
+        "name": "translator_encoder.onnx",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/748b13972be5-translator_encoder.onnx",
+        "size_bytes": 50527480,
+        "sha256": "748b13972be520ffa6d1f49a95d390ce8cd04c1797a439bde8710db81c7e336e"
+      },
+      "translator_decoder": {
+        "name": "translator_decoder.onnx",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/a737152b6cdb-translator_decoder.onnx",
+        "size_bytes": 88436174,
+        "sha256": "a737152b6cdbc0bdb5a2dc34fa27935fb5f930e46812c74dcc6084c6620a0dbd"
+      },
+      "translator_vocab": {
+        "name": "translator_vocab.json",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/f2338428d17c-translator_vocab.json",
+        "size_bytes": 3236676,
+        "sha256": "f2338428d17c6ebdbf4eac65d2381f2d0a42daf7b5a390fa8182ef13080c56a2"
+      }
+    },
+    {
+      "id": "zh-en-base",
+      "name": "Chinese to English (experimental)",
+      "description": "DBNet detector + manga-ocr recogniser + opus-MT zh-en, int8",
+      "source_languages": [
+        "zh"
+      ],
+      "target_languages": [
+        "en"
+      ],
+      "config": {
+        "detector_input_size": 1024,
+        "detector_input_name": "input",
+        "detector_output_name": "output",
+        "detector_mean": [
+          0.798,
+          0.785,
+          0.772
+        ],
+        "detector_std": [
+          0.264,
+          0.2749,
+          0.287
+        ],
+        "detector_merge_slop": 2.0,
+        "translator_uses_language_token": false,
+        "translator_decoder_start_token": "<pad>"
+      },
+      "detector": {
+        "name": "detector.onnx",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/611d327446fa-detector.onnx",
+        "size_bytes": 4476296,
+        "sha256": "611d327446fa682c746ad029078559d706f260f81c650850f81d8ddc6320e871"
+      },
+      "recognizer_encoder": {
+        "name": "recognizer_encoder.onnx",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/86d4a9b43b01-recognizer_encoder.onnx",
+        "size_bytes": 86967767,
+        "sha256": "86d4a9b43b0171d912ed009e411f583710a4d35a5c95f1453f1f0ad4aae2232e"
+      },
+      "recognizer_decoder": {
+        "name": "recognizer_decoder.onnx",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/e72cc2614f48-recognizer_decoder.onnx",
+        "size_bytes": 29627936,
+        "sha256": "e72cc2614f48ea6691f9a83ff645b93cce8388bc23fa834a76765de0d293fff0"
+      },
+      "recognizer_vocab": {
+        "name": "recognizer_vocab.json",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/edee83dd4484-recognizer_vocab.json",
+        "size_bytes": 42506,
+        "sha256": "edee83dd448425ef4de06704e0bc4e18ee8970a502a4b3a0913bd6e7085dc951"
+      },
+      "translator_encoder": {
+        "name": "translator_encoder.onnx",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/e4c39b418df5-translator_encoder.onnx",
+        "size_bytes": 52721399,
+        "sha256": "e4c39b418df5d8dde8f0a1d76c99fb5e34d7d6e978b196726a05557ec0ab448e"
+      },
+      "translator_decoder": {
+        "name": "translator_decoder.onnx",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/401710206f64-translator_decoder.onnx",
+        "size_bytes": 92841153,
+        "sha256": "401710206f64a33829eb88146b2eb5955448f4c789a9a67d4262fb885cac1f50"
+      },
+      "translator_vocab": {
+        "name": "translator_vocab.json",
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/ffeb95e46f9c-translator_vocab.json",
+        "size_bytes": 3469603,
+        "sha256": "ffeb95e46f9c5ddcf59af3f50e4984aef6a09b6c19e27e96247c2ba8774b1581"
+      }
+    }
+  ]
+}

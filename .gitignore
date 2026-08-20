@@ -1,0 +1,23 @@
+# This is an orphan branch holding only pack tooling; the app lives on main. A single clone
+# switches between the two, so the app's directories are physically present here even though
+# they belong to the other branch. Ignoring them keeps `git status` readable and makes it hard
+# to commit app code onto this branch by accident.
+app/
+baseline-profile/
+core/
+core-metadata/
+data/
+domain/
+gradle/
+i18n/
+presentation-core/
+presentation-widget/
+source-api/
+source-local/
+telemetry/
+translation/
+tools/
+build/
+.gradle/
+.kotlin/
+local.properties

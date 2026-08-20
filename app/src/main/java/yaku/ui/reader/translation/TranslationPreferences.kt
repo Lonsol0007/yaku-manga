@@ -30,13 +30,20 @@ class TranslationPreferences(
     val activePackId: Preference<String> = preferenceStore.getString("pref_translation_pack_id", "")
 
     /**
-     * Where to look for downloadable model packs.
+     * Manifests to look in for downloadable packs.
      *
-     * Empty by default: the app makes no network request for models unless the user points it at
-     * a manifest, so a user who sideloads packs into the app's files directory never talks to a
-     * server at all.
+     * The official source is pre-filled so translation is usable without hunting for a URL, but
+     * nothing is fetched until the pack browser is opened or a download is started - launching
+     * the app still makes no request for models. Clearing the list, or sideloading packs into the
+     * files directory by hand, leaves the feature entirely offline.
+     *
+     * A set rather than one URL so third-party packs are a first-class case, instead of something
+     * you reach by overwriting the official source and losing it.
      */
-    val manifestUrl: Preference<String> = preferenceStore.getString("pref_translation_manifest_url", "")
+    val packSources: Preference<Set<String>> = preferenceStore.getStringSet(
+        "pref_translation_pack_sources",
+        setOf(DEFAULT_PACK_SOURCE),
+    )
 
     val wifiOnlyDownloads: Preference<Boolean> =
         preferenceStore.getBoolean("pref_translation_wifi_only", true)
@@ -49,4 +56,16 @@ class TranslationPreferences(
 
     fun target(): TranslationLanguage =
         TranslationLanguage.fromCode(targetLanguage.get()) ?: TranslationLanguage.ENGLISH
+
+    companion object {
+        /**
+         * Packs published alongside the app's own releases.
+         *
+         * A release tag rather than a branch path: the manifest records a SHA-256 per file, so it
+         * has to stay pinned to the exact files it was generated against. A moving target would
+         * start failing checksums the moment the packs were rebuilt.
+         */
+        const val DEFAULT_PACK_SOURCE =
+            "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/manifest.json"
+    }
 }

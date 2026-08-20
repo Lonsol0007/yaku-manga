@@ -32,6 +32,15 @@ data class ModelPack(
     @SerialName("translator_decoder") val translatorDecoder: ModelFile,
     @SerialName("translator_vocab") val translatorVocab: ModelFile,
     val config: PackConfig = PackConfig(),
+    /**
+     * Manifest this pack was offered by. Absent from manifests themselves - the repository
+     * stamps it in on fetch and stores it in the installed descriptor.
+     *
+     * Two sources can name a pack `ja-en-base` and mean different things, and packs install into
+     * a directory named after their id. Recording where one came from is what lets an install
+     * refuse to write over an unrelated pack that happens to share a name.
+     */
+    val source: String = "",
 ) {
     val files: List<ModelFile>
         get() = listOf(

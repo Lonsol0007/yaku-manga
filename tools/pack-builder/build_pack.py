@@ -59,6 +59,22 @@ PRESETS: dict[str, Preset] = {
         translator_uses_language_token=False,
         translator_decoder_start_token="<pad>",
     ),
+    # Chinese. The recogniser was trained on Japanese manga, but its vocabulary carries 4918
+    # han characters against only 87 hiragana, so hanzi are well covered. Typography and layout
+    # differ from what it saw in training, so quality is unverified - hence "experimental".
+    "zh-en": Preset(
+        pack_id="zh-en-base",
+        name="Chinese to English (experimental)",
+        description="DBNet detector + manga-ocr recogniser + opus-MT zh-en, int8",
+        source_languages=["zh"],
+        target_languages=["en"],
+        detector_arch="db_mobilenet_v3_large",
+        detector_size=1024,
+        recognizer_model="kha-white/manga-ocr-base",
+        translator_model="Helsinki-NLP/opus-mt-zh-en",
+        translator_uses_language_token=False,
+        translator_decoder_start_token="<pad>",
+    ),
     # Multilingual, and much heavier: NLLB-600M is ~2.4 GB fp32 and still ~600 MB at int8.
     # Only worth it if you need more than one language pair from a single pack.
     "ja-multi": Preset(

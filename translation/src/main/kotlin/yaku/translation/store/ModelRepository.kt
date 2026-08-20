@@ -71,9 +71,34 @@ class ModelRepository(
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("Manifest request failed: HTTP ${response.code}")
             val body = response.body?.string().orEmpty()
-            json.decodeFromString<ModelManifest>(body)
+            val manifest = json.decodeFromString<ModelManifest>(body)
+            // Stamp the origin onto every pack so an install can tell two same-named packs apart.
+            manifest.copy(packs = manifest.packs.map { it.copy(source = manifestUrl) })
         }
     }
+
+    /**
+     * Fetches every configured source, keeping whichever ones answer.
+     *
+     * One unreachable third-party source must not hide the packs the others offer, so failures
+     * are collected and returned alongside the results instead of thrown.
+     */
+    suspend fun fetchAll(sources: Collection<String>): SourceResults = withContext(Dispatchers.IO) {
+        val packs = mutableListOf<ModelPack>()
+        val failures = mutableMapOf<String, String>()
+
+        for (source in sources.map { it.trim() }.filter { it.isNotEmpty() }.distinct()) {
+            runCatching { fetchManifest(source) }
+                .onSuccess { packs += it.packs }
+                .onFailure { failures[source] = it.message ?: it::class.simpleName.orEmpty() }
+        }
+        SourceResults(packs = packs, failures = failures)
+    }
+
+    data class SourceResults(
+        val packs: List<ModelPack>,
+        val failures: Map<String, String>,
+    )
 
     /**
      * Downloads every file in [pack] that is not already present and verified.
@@ -83,6 +108,23 @@ class ModelRepository(
      * a corrupt model that fails at inference time.
      */
     fun download(pack: ModelPack): Flow<DownloadProgress> = callbackFlow {
+        // Packs live in a directory named after their id, so a third-party manifest offering
+        // "ja-en-base" would otherwise silently overwrite the installed pack of that name. Refuse
+        // instead: replacing someone's working models with an unrelated download, because two
+        // authors picked the same string, is not a decision to make on their behalf.
+        val existing = installedPack(pack.id)
+        if (existing != null && existing.source.isNotEmpty() &&
+            pack.source.isNotEmpty() && existing.source != pack.source
+        ) {
+            close(
+                IllegalStateException(
+                    "A pack with id '${pack.id}' is already installed from ${existing.source}. " +
+                        "Remove it before installing the one from ${pack.source}.",
+                ),
+            )
+            return@callbackFlow
+        }
+
         val dir = packDir(pack.id).apply { mkdirs() }
         val total = pack.totalBytes.coerceAtLeast(1L)
         var completedBytes = 0L

@@ -1104,4 +1104,5 @@
     <string name="pref_translation_sources_warning">A pack is machine-learning code that runs on your device. Only add sources you trust.</string>
     <string name="pref_translation_add_source">Add source</string>
     <string name="pref_translation_no_sources">No sources configured. Packs can still be sideloaded into the app's files directory.</string>
+    <string name="pref_translation_wifi_required">Connect to Wi-Fi, or turn off "Download over Wi-Fi only"</string>
 </resources>

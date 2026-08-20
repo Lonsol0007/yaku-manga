@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -32,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import eu.kanade.tachiyomi.util.system.activeNetworkState
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import yaku.app.di.appGraph
@@ -56,7 +58,10 @@ object SettingsTranslationScreen : SearchableSettings {
         val prefs = remember { graph.translationPreferences }
         val translator = remember { graph.pageTranslator }
 
-        val installed = remember { translator.repository.installedPacks() }
+        // Bumped when a download finishes. Without it the installed list is read once and a
+        // freshly downloaded pack stays unselectable until Settings is left and reopened.
+        var installedToken by remember { mutableIntStateOf(0) }
+        val installed = remember(installedToken) { translator.repository.installedPacks() }
         val noPacksLabel = stringResource(MR.strings.pref_translation_no_packs)
         val packEntries = remember(installed, noPacksLabel) {
             if (installed.isEmpty()) {
@@ -111,7 +116,7 @@ object SettingsTranslationScreen : SearchableSettings {
                     Preference.PreferenceItem.CustomPreference(
                         title = stringResource(MR.strings.pref_translation_browse_packs),
                     ) {
-                        PackDownloader(translator, prefs)
+                        PackDownloader(translator, prefs, onInstalled = { installedToken++ })
                     },
                 ),
             ),
@@ -247,8 +252,14 @@ private fun PackSources(prefs: TranslationPreferences) {
  * cause a request, or shipping a default source would turn every launch into a network call.
  */
 @Composable
-private fun PackDownloader(translator: PageTranslator, prefs: TranslationPreferences) {
+private fun PackDownloader(
+    translator: PageTranslator,
+    prefs: TranslationPreferences,
+    onInstalled: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val wifiRequiredMessage = stringResource(MR.strings.pref_translation_wifi_required)
     var packs by remember { mutableStateOf<List<ModelPack>>(emptyList()) }
     var failures by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var showDialog by remember { mutableStateOf(false) }
@@ -330,6 +341,18 @@ private fun PackDownloader(translator: PageTranslator, prefs: TranslationPrefere
                             Button(
                                 onClick = {
                                     showDialog = false
+                                    // Honour the Wi-Fi switch at the point the bytes would
+                                    // actually move. A pack is a few hundred megabytes, so
+                                    // spending that on mobile data while the setting says
+                                    // otherwise is a real cost, not a cosmetic slip. Checked
+                                    // here rather than at browse time because reading a
+                                    // manifest is a few kilobytes and worth allowing.
+                                    if (prefs.wifiOnlyDownloads.get() &&
+                                        !context.activeNetworkState().isWifi
+                                    ) {
+                                        status = wifiRequiredMessage
+                                        return@Button
+                                    }
                                     scope.launch {
                                         progress = 0f
                                         translator.repository.download(pack)
@@ -340,6 +363,9 @@ private fun PackDownloader(translator: PageTranslator, prefs: TranslationPrefere
                                             .collect { progress = it.fraction }
                                         progress = null
                                         status = "Downloaded ${pack.name}"
+                                        // Re-read the installed list so the pack is selectable
+                                        // and the master switch enables without leaving Settings.
+                                        onInstalled()
                                     }
                                 },
                             ) {

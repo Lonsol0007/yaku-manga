@@ -63,6 +63,7 @@ object SettingsTranslationScreen : SearchableSettings {
         var installedToken by remember { mutableIntStateOf(0) }
         val installed = remember(installedToken) { translator.repository.installedPacks() }
         val noPacksLabel = stringResource(MR.strings.pref_translation_no_packs)
+        val noneSelectedLabel = stringResource(MR.strings.pref_translation_no_pack_selected)
         val packEntries = remember(installed, noPacksLabel) {
             if (installed.isEmpty()) {
                 mapOf("" to noPacksLabel)
@@ -103,6 +104,13 @@ object SettingsTranslationScreen : SearchableSettings {
                         value = prefs.activePackId.get(),
                         entries = packEntries,
                         title = stringResource(MR.strings.pref_translation_active_pack),
+                        // The default subtitle is `subtitle.format(entries[value])`, which prints
+                        // the literal string "null" whenever the stored id is not one of the
+                        // entries - as it is with no pack selected, or after the selected pack is
+                        // deleted. Say what is actually true instead.
+                        subtitleProvider = { value, entries ->
+                            entries[value] ?: noneSelectedLabel
+                        },
                         onValueChanged = {
                             prefs.activePackId.set(it)
                             // Drop the loaded sessions so the next page picks up the new pack.
@@ -363,6 +371,18 @@ private fun PackDownloader(
                                             .collect { progress = it.fraction }
                                         progress = null
                                         status = "Downloaded ${pack.name}"
+                                        // Adopt the pack that was just downloaded when nothing
+                                        // usable is selected. Downloading a pack and then having
+                                        // to pick it separately is a step with no decision in it,
+                                        // and leaving the selection dangling is what surfaced as
+                                        // an active pack of "null".
+                                        val current = prefs.activePackId.get()
+                                        val stillInstalled = translator.repository
+                                            .installedPacks().any { it.id == current }
+                                        if (!stillInstalled) {
+                                            prefs.activePackId.set(pack.id)
+                                            translator.release()
+                                        }
                                         // Re-read the installed list so the pack is selectable
                                         // and the master switch enables without leaving Settings.
                                         onInstalled()

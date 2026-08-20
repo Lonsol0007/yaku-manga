@@ -298,12 +298,12 @@ private fun PackDownloader(
                     val results = translator.repository.fetchAll(sources)
                     packs = results.packs
                     failures = results.failures
-                    status = when {
-                        results.packs.isNotEmpty() -> null
-                        results.failures.isNotEmpty() -> results.failures.values.first()
-                        else -> "No packs offered"
-                    }
-                    if (results.packs.isNotEmpty()) showDialog = true
+                    status = null
+                    // Open the dialog whether or not anything was found. Reporting a total
+                    // failure through a single line of status text under the button is
+                    // indistinguishable from the button doing nothing at all, which is exactly
+                    // how it was described when it broke.
+                    showDialog = true
                 }
             },
             enabled = progress == null,
@@ -331,6 +331,14 @@ private fun PackDownloader(
             title = { Text(stringResource(MR.strings.pref_translation_available_packs)) },
             text = {
                 LazyColumn {
+                    if (packs.isEmpty() && failures.isEmpty()) {
+                        item {
+                            Text(
+                                text = stringResource(MR.strings.pref_translation_sources_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
                     // A source that failed is reported rather than silently omitted; otherwise a
                     // typo in a URL looks identical to a source with nothing to offer.
                     items(failures.entries.toList()) { (source, reason) ->

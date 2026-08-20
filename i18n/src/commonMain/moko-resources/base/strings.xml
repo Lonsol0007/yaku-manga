@@ -1112,4 +1112,5 @@
     <string name="pref_translation_pack_active">active</string>
     <string name="pref_translation_download_failed">Download failed</string>
     <string name="pref_translation_download_incomplete">Download did not complete — the pack is not installed</string>
+    <string name="pref_translation_sources_empty">No packs were offered and no source reported an error. Check the source URL under Pack sources.</string>
 </resources>

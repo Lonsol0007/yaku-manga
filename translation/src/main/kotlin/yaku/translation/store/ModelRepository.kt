@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
+import okhttp3.CacheControl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okio.buffer
@@ -73,10 +74,32 @@ class ModelRepository(
     fun installedBytes(): Long = root.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
     suspend fun fetchManifest(manifestUrl: String): ModelManifest = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(manifestUrl).build()
+        val request = Request.Builder()
+            .url(manifestUrl)
+            // Never serve a manifest from the HTTP cache. A captive portal or filtering
+            // middlebox answers with a cacheable 200 carrying an HTML page, and once that is in
+            // the cache every later attempt replays it even after the network is fixed.
+            .cacheControl(CacheControl.FORCE_NETWORK)
+            .build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("Manifest request failed: HTTP ${response.code}")
             val body = response.body?.string().orEmpty()
+
+            // Check the shape before parsing. Handing HTML to the JSON parser produces
+            // "Unexpected JSON token at offset 8", which describes the symptom and hides the
+            // cause: something answered instead of the server.
+            val head = body.trimStart()
+            if (!head.startsWith("{")) {
+                error(
+                    if (head.startsWith("<")) {
+                        "Got a web page instead of the manifest. A captive portal, ISP filter, " +
+                            "DNS blocker or proxy is intercepting this request - the server " +
+                            "itself answered HTTP ${response.code}."
+                    } else {
+                        "Manifest was not JSON (HTTP ${response.code}, ${body.length} bytes)"
+                    },
+                )
+            }
             val manifest = json.decodeFromString<ModelManifest>(body)
             // Stamp the origin onto every pack so an install can tell two same-named packs apart.
             manifest.copy(packs = manifest.packs.map { it.copy(source = manifestUrl) })
@@ -96,7 +119,15 @@ class ModelRepository(
         for (source in sources.map { it.trim() }.filter { it.isNotEmpty() }.distinct()) {
             runCatching { fetchManifest(source) }
                 .onSuccess { packs += it.packs }
-                .onFailure { failures[source] = it.message ?: it::class.simpleName.orEmpty() }
+                .onFailure { error ->
+                    // Both the type and the message. Network exceptions frequently carry a null
+                    // message (a bare SSLHandshakeException, for one), and "null" on screen
+                    // tells the user nothing they can act on or report.
+                    val type = error::class.simpleName.orEmpty()
+                    val detail = error.message.orEmpty()
+                    failures[source] = if (detail.isBlank()) type else "$type: $detail"
+                    logcat(LogPriority.ERROR, error) { "Pack source failed: $source" }
+                }
         }
         SourceResults(packs = packs, failures = failures)
     }
@@ -147,7 +178,10 @@ class ModelRepository(
                 val part = File(dir, file.name + ".part")
                 part.delete()
 
-                val request = Request.Builder().url(file.url).build()
+                val request = Request.Builder()
+                    .url(file.url)
+                    .cacheControl(CacheControl.FORCE_NETWORK)
+                    .build()
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) error("Download failed for ${file.name}: HTTP ${response.code}")
                     val body = response.body ?: error("Empty body for ${file.name}")

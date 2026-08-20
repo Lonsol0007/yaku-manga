@@ -19,6 +19,34 @@ request, verified by SHA-256, and stored under the app's private files directory
 Copying that directory into place by hand works too — the app reads `pack.json` and never contacts
 the network for a pack that is already installed.
 
+## Where packs come from
+
+Settings holds a *list* of manifest URLs, not one. The official source is pre-filled and can be
+removed like any other; adding your own does not displace it. Nothing is fetched until the pack
+browser is opened, so a user who sideloads packs never makes a request at all.
+
+If a source is unreachable its failure is shown next to the packs the other sources returned,
+rather than replacing them - a typo in a URL should not look the same as a source with nothing
+to offer.
+
+### Publishing your own
+
+Point a manifest URL at JSON in the shape below and anyone can add it. `tools/pack-builder`
+includes `publish_packs.py`, which stages packs for a GitHub release: it names assets by content
+hash, so packs sharing a detector or recogniser upload those files once.
+
+Two things to know before publishing:
+
+- **Pack ids are directory names.** A pack installs to
+  `<app files>/translation-models/<id>/`, so an id that collides with an already-installed pack
+  from a different source is refused rather than allowed to overwrite it. Prefix yours if you
+  expect collisions.
+- **Every file needs a correct SHA-256.** It is enforced, and a mismatch deletes the file. That is
+  deliberate: a corrupt model does not fail cleanly, it produces garbage translations.
+
+A pack is machine-learning code that runs on the user's device. Users should treat adding a
+source the way they treat adding an extension repository.
+
 ## Building a pack
 
 Use [`tools/pack-builder`](../tools/pack-builder/README.md), which exports the models, quantises

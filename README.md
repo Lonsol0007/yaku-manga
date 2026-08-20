@@ -36,13 +36,74 @@ border cropping all keep working without knowing translation happened.
 
 ### Models are not bundled
 
-The APK ships with no weights. A usable pack is a few hundred megabytes, and which one is right
-depends on the language pair you read, so packs are downloaded on request and verified by SHA-256
-before use. Point the app at a manifest URL in settings, or drop a pack directly into the app's
-files directory to keep it fully offline. See [`docs/translation-packs.md`](docs/translation-packs.md)
-for the manifest format.
+The APK ships with no weights. A usable pack is a few hundred megabytes and which one is right
+depends on what you read, so packs are downloaded on request and verified by SHA-256 before use.
 
-### Privacy posture
+## Installing a translation pack
+
+Nothing translates until a pack is installed. Three ways, easiest first.
+
+### From the app
+
+**Settings → Translation → Browse packs**, pick one, **Download**. The official source is
+pre-filled, so there is nothing to configure.
+
+Then set **Active pack** to what you downloaded and turn the master switch on. It stays disabled
+until a pack exists, on purpose: enabling translation with no models would silently do nothing.
+
+| Pack | Size | Notes |
+|---|---|---|
+| Japanese → English | 263 MB | The one to start with |
+| Chinese → English | 270 MB | Experimental, see below |
+
+Packs are published at the [packs-v1 release](https://github.com/Lonsol0007/yaku-manga/releases/tag/packs-v1).
+Downloads land in the app's private directory, so uninstalling removes them and no other app can
+read them. Downloads honour the **Wi-Fi only** switch; browsing a manifest is a few kilobytes and
+is allowed on any connection.
+
+There is **no Korean pack**, deliberately. The recogniser's vocabulary carries 4918 han characters
+but only 193 hangul, against the ~2350 common syllables Korean needs, so a Korean pack would
+produce confident nonsense. Chinese works *because* of that han coverage, but the recogniser never
+saw Chinese typography in training — hence "experimental" rather than a quiet claim of support.
+
+### From your own machine, over the LAN
+
+Build a pack and serve it from a PC on the same Wi-Fi. Nothing leaves your network.
+
+```
+cd tools/pack-builder
+python build_pack.py --preset ja-en
+python serve_pack.py out
+```
+
+`serve_pack.py` prints a URL. Add it in **Settings → Translation → Pack sources → Add source**.
+See [`tools/pack-builder/README.md`](tools/pack-builder/README.md) for prerequisites.
+
+### By hand, over ADB
+
+Debug builds only — release builds are not debuggable, so `run-as` cannot reach their private
+directory without root.
+
+```
+adb push out/ja-en-base /data/local/tmp/ja-en-base
+adb shell run-as app.yaku.dev mkdir -p files/translation-models
+adb shell run-as app.yaku.dev cp -r /data/local/tmp/ja-en-base files/translation-models/
+```
+
+A pack installed this way never touches the network at all.
+
+### Third-party packs
+
+The source list takes any number of manifest URLs, so anyone can publish packs without displacing
+the official ones — and the official entry can be removed like any other. If a source is
+unreachable, its error is shown beside the packs the other sources returned rather than replacing
+them, because a typo'd URL should not look the same as a source with nothing to offer.
+
+A pack is machine-learning code that runs on your device. Add sources you trust, the same way you
+would with an extension repository. [`docs/translation-packs.md`](docs/translation-packs.md) has
+the manifest format and the rules a publisher needs to know.
+
+## Privacy posture
 
 * No telemetry in a default build. Crash reporting is a compile-time opt-in (`-Pinclude-telemetry`)
   and is additionally gated on a signing certificate, so unofficial builds never report.

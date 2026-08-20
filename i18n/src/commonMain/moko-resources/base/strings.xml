@@ -1106,4 +1106,8 @@
     <string name="pref_translation_no_sources">No sources configured. Packs can still be sideloaded into the app's files directory.</string>
     <string name="pref_translation_wifi_required">Connect to Wi-Fi, or turn off "Download over Wi-Fi only"</string>
     <string name="pref_translation_no_pack_selected">None selected</string>
+    <string name="pref_translation_installed_packs">Installed packs</string>
+    <string name="pref_translation_delete_pack">Delete pack?</string>
+    <string name="pref_translation_delete_pack_confirm">Remove %1$s and free %2$d MB? You can download it again later.</string>
+    <string name="pref_translation_pack_active">active</string>
 </resources>

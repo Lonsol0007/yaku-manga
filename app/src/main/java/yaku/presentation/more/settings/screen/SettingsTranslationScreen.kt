@@ -126,6 +126,16 @@ object SettingsTranslationScreen : SearchableSettings {
                     ) {
                         PackDownloader(translator, prefs, onInstalled = { installedToken++ })
                     },
+                    Preference.PreferenceItem.CustomPreference(
+                        title = stringResource(MR.strings.pref_translation_installed_packs),
+                    ) {
+                        InstalledPacks(
+                            translator = translator,
+                            prefs = prefs,
+                            installed = installed,
+                            onChanged = { installedToken++ },
+                        )
+                    },
                 ),
             ),
             Preference.PreferenceGroup(
@@ -399,4 +409,107 @@ private fun PackDownloader(
     }
 
     LaunchedEffect(Unit) { status = null }
+}
+
+/**
+ * Lists what is on disk and lets it be removed.
+ *
+ * Packs are a few hundred megabytes each and the app cannot reclaim that on its own, so removal
+ * has to be reachable from the same screen that installs them.
+ */
+@Composable
+private fun InstalledPacks(
+    translator: PageTranslator,
+    prefs: TranslationPreferences,
+    installed: List<ModelPack>,
+    onChanged: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var pendingDelete by remember { mutableStateOf<ModelPack?>(null) }
+    // Resolved up here: buildString below is not a composable scope.
+    val activeSuffix = stringResource(MR.strings.pref_translation_pack_active)
+
+    if (installed.isEmpty()) {
+        Text(
+            text = stringResource(MR.strings.pref_translation_no_packs),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        return
+    }
+
+    val activeId = prefs.activePackId.get()
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        installed.forEach { pack ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = pack.name, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = buildString {
+                            append("${pack.totalBytes / 1_000_000} MB")
+                            if (pack.id == activeId) {
+                                append(" — ")
+                                append(activeSuffix)
+                            }
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = { pendingDelete = pack }) {
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = stringResource(MR.strings.action_delete),
+                    )
+                }
+            }
+        }
+    }
+
+    pendingDelete?.let { pack ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(MR.strings.pref_translation_delete_pack)) },
+            text = {
+                Text(
+                    stringResource(
+                        MR.strings.pref_translation_delete_pack_confirm,
+                        pack.name,
+                        pack.totalBytes / 1_000_000,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDelete = null
+                    scope.launch {
+                        // Release before deleting: the engine may hold open handles to these
+                        // files, and closing an OrtSession after its weights vanish is a native
+                        // failure rather than a catchable one.
+                        if (pack.id == prefs.activePackId.get()) {
+                            translator.release()
+                            prefs.activePackId.set("")
+                        }
+                        translator.repository.delete(pack.id)
+                        onChanged()
+                    }
+                }) {
+                    Text(stringResource(MR.strings.action_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text(stringResource(MR.strings.action_cancel))
+                }
+            },
+        )
+    }
 }

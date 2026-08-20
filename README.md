@@ -71,13 +71,15 @@ saw Chinese typography in training — hence "experimental" rather than a quiet 
 Build a pack and serve it from a PC on the same Wi-Fi. Nothing leaves your network.
 
 ```
-cd tools/pack-builder
+git clone -b packs https://github.com/Lonsol0007/yaku-manga.git yaku-packs
+cd yaku-packs/pack-builder
 python build_pack.py --preset ja-en
 python serve_pack.py out
 ```
 
 `serve_pack.py` prints a URL. Add it in **Settings → Translation → Pack sources → Add source**.
-See [`tools/pack-builder/README.md`](tools/pack-builder/README.md) for prerequisites.
+The tooling lives on the [`packs`](https://github.com/Lonsol0007/yaku-manga/tree/packs) branch rather than here; its
+[README](https://github.com/Lonsol0007/yaku-manga/tree/packs/pack-builder/README.md) lists the prerequisites.
 
 ### By hand, over ADB
 
@@ -100,8 +102,8 @@ unreachable, its error is shown beside the packs the other sources returned rath
 them, because a typo'd URL should not look the same as a source with nothing to offer.
 
 A pack is machine-learning code that runs on your device. Add sources you trust, the same way you
-would with an extension repository. [`docs/translation-packs.md`](docs/translation-packs.md) has
-the manifest format and the rules a publisher needs to know.
+would with an extension repository. The [`packs`](https://github.com/Lonsol0007/yaku-manga/tree/packs) branch carries the
+manifest format and the rules a publisher needs to know.
 
 ## Privacy posture
 

@@ -15,3 +15,7 @@ local.properties
 
 # macOS specific files
 .DS_Store
+
+# Pack tooling moved to the orphan `packs` branch. The directory survives locally as a
+# working venv and export cache; neither belongs in the app repo.
+tools/pack-builder/

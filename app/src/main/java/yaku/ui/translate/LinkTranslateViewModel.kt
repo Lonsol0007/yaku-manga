@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import okhttp3.HttpUrl
+import okio.Buffer
 import okio.buffer
 import okio.sink
 import yaku.core.common.util.system.logcat
@@ -69,7 +70,14 @@ class LinkTranslateViewModel(
             _state.update { it.copy(stage = Stage.Fetching, pages = emptyList(), error = null) }
             resetOutputDir()
 
+            // A link that was itself an image arrives with its bytes already downloaded; reusing
+            // them avoids pulling the same file twice.
+            var prefetched: ByteArray? = null
             val urls = when (val result = extractor.imagesFrom(url)) {
+                is LinkImageExtractor.Result.SingleImage -> {
+                    prefetched = result.bytes
+                    listOf(result.url)
+                }
                 is LinkImageExtractor.Result.Images -> result.urls
                 LinkImageExtractor.Result.BadUrl -> return@launch fail(Error.BadUrl)
                 LinkImageExtractor.Result.NoImages -> return@launch fail(Error.NoImages)
@@ -82,7 +90,7 @@ class LinkTranslateViewModel(
             _state.update { it.copy(stage = Stage.Translating(done = 0, total = urls.size)) }
 
             urls.forEachIndexed { index, imageUrl ->
-                val page = runCatching { translateOne(imageUrl, index) }
+                val page = runCatching { translateOne(imageUrl, index, prefetched) }
                     .onFailure { logcat(LogPriority.WARN, it) { "Failed on $imageUrl" } }
                     .getOrNull()
 
@@ -105,10 +113,18 @@ class LinkTranslateViewModel(
         }
     }
 
-    private suspend fun translateOne(url: HttpUrl, index: Int): Page = withContext(Dispatchers.IO) {
-        val bytes = client.newCall(GET(url.toString())).await().use { response ->
-            check(response.isSuccessful) { "HTTP ${response.code}" }
-            response.body.source().use { pageTranslator.translate(it).readByteArray() }
+    private suspend fun translateOne(
+        url: HttpUrl,
+        index: Int,
+        prefetched: ByteArray?,
+    ): Page = withContext(Dispatchers.IO) {
+        val bytes = if (prefetched != null) {
+            Buffer().write(prefetched).use { pageTranslator.translate(it).readByteArray() }
+        } else {
+            client.newCall(GET(url.toString())).await().use { response ->
+                check(response.isSuccessful) { "HTTP ${response.code}" }
+                response.body.source().use { pageTranslator.translate(it).readByteArray() }
+            }
         }
 
         val file = File(outputDir, "page_%03d.png".format(index))

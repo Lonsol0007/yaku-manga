@@ -35,7 +35,9 @@ class LinkImageExtractor(private val client: OkHttpClient) {
 
             val contentType = it.header("Content-Type").orEmpty().substringBefore(';').trim()
             when {
-                contentType.startsWith("image/") -> Result.Images(listOf(url))
+                // The body is already downloaded by the time the type is known, so hand it back
+                // rather than making the caller fetch the same bytes a second time.
+                contentType.startsWith("image/") -> Result.SingleImage(url, it.body.bytes())
                 contentType.startsWith("text/html") || contentType.contains("xhtml") -> {
                     val images = extractFromHtml(it.body.string(), url)
                     if (images.isEmpty()) Result.NoImages else Result.Images(images)
@@ -88,6 +90,14 @@ class LinkImageExtractor(private val client: OkHttpClient) {
     }
 
     sealed interface Result {
+        /** A link that was itself an image, with the bytes already in hand. */
+        data class SingleImage(val url: HttpUrl, val bytes: ByteArray) : Result {
+            override fun equals(other: Any?) =
+                this === other || (other is SingleImage && url == other.url && bytes.contentEquals(other.bytes))
+
+            override fun hashCode() = 31 * url.hashCode() + bytes.contentHashCode()
+        }
+
         data class Images(val urls: List<HttpUrl>) : Result
         data object BadUrl : Result
         data object NoImages : Result

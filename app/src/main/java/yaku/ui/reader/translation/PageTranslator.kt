@@ -118,7 +118,15 @@ class PageTranslator(
         if (packId.isBlank()) return null
 
         val current = engine
-        if (current != null && engineFor == packId) return current.takeIf { it.isReady() }
+        if (current != null && engineFor == packId) {
+            if (current.isReady()) return current
+            // The pack was deleted underneath us. Drop the engine rather than holding a handle
+            // to missing files, which would otherwise fail identically on every later page.
+            current.close()
+            engine = null
+            engineFor = null
+            return null
+        }
 
         current?.close()
         engine = null
@@ -149,7 +157,14 @@ class PageTranslator(
         }
     }
 
-    fun release() {
+    /**
+     * Drops the loaded models.
+     *
+     * Takes [gate] because closing an OrtSession that another coroutine is inside of frees native
+     * memory still in use - that is a SIGSEGV, not a catchable exception. Switching packs in
+     * settings while the reader is translating reaches exactly that.
+     */
+    suspend fun release() = gate.withLock {
         engine?.close()
         engine = null
         engineFor = null

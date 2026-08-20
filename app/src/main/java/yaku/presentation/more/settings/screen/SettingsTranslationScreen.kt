@@ -34,7 +34,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.util.system.activeNetworkState
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import yaku.app.di.appGraph
 import yaku.i18n.MR
@@ -278,6 +277,8 @@ private fun PackDownloader(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val wifiRequiredMessage = stringResource(MR.strings.pref_translation_wifi_required)
+    val failedLabel = stringResource(MR.strings.pref_translation_download_failed)
+    val incompleteLabel = stringResource(MR.strings.pref_translation_download_incomplete)
     var packs by remember { mutableStateOf<List<ModelPack>>(emptyList()) }
     var failures by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var showDialog by remember { mutableStateOf(false) }
@@ -373,25 +374,38 @@ private fun PackDownloader(
                                     }
                                     scope.launch {
                                         progress = 0f
-                                        translator.repository.download(pack)
-                                            .catch {
-                                                status = it.message ?: "Download failed"
-                                                progress = null
-                                            }
-                                            .collect { progress = it.fraction }
+                                        // Deliberately not Flow.catch: it handles the error and
+                                        // lets the flow complete *normally*, so everything after
+                                        // it ran on failure too - reporting "Downloaded" for a
+                                        // download that never happened and selecting a pack that
+                                        // was never installed.
+                                        val outcome = runCatching {
+                                            translator.repository.download(pack)
+                                                .collect { progress = it.fraction }
+                                        }
                                         progress = null
-                                        status = "Downloaded ${pack.name}"
-                                        // Adopt the pack that was just downloaded when nothing
-                                        // usable is selected. Downloading a pack and then having
-                                        // to pick it separately is a step with no decision in it,
-                                        // and leaving the selection dangling is what surfaced as
-                                        // an active pack of "null".
-                                        val current = prefs.activePackId.get()
-                                        val stillInstalled = translator.repository
-                                            .installedPacks().any { it.id == current }
-                                        if (!stillInstalled) {
-                                            prefs.activePackId.set(pack.id)
-                                            translator.release()
+
+                                        // Confirm against disk rather than trusting the flow to
+                                        // have finished its work. That is what "Downloaded"
+                                        // should mean, and it is cheap to verify.
+                                        val landed = translator.repository.installedPack(pack.id)
+
+                                        status = when {
+                                            outcome.isFailure ->
+                                                outcome.exceptionOrNull()?.message ?: failedLabel
+                                            landed == null -> incompleteLabel
+                                            else -> {
+                                                // Adopt the new pack when nothing valid is
+                                                // selected; a deliberate choice is left alone.
+                                                val current = prefs.activePackId.get()
+                                                val valid = translator.repository
+                                                    .installedPacks().any { it.id == current }
+                                                if (!valid) {
+                                                    prefs.activePackId.set(pack.id)
+                                                    translator.release()
+                                                }
+                                                "Downloaded ${pack.name}"
+                                            }
                                         }
                                         // Re-read the installed list so the pack is selectable
                                         // and the master switch enables without leaving Settings.

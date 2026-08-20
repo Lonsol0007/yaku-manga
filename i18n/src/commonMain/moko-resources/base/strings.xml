@@ -1110,4 +1110,6 @@
     <string name="pref_translation_delete_pack">Delete pack?</string>
     <string name="pref_translation_delete_pack_confirm">Remove %1$s and free %2$d MB? You can download it again later.</string>
     <string name="pref_translation_pack_active">active</string>
+    <string name="pref_translation_download_failed">Download failed</string>
+    <string name="pref_translation_download_incomplete">Download did not complete — the pack is not installed</string>
 </resources>

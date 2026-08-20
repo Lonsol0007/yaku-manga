@@ -56,7 +56,13 @@ class ModelRepository(
     fun installedPack(packId: String): ModelPack? {
         val descriptor = File(packDir(packId), PACK_DESCRIPTOR)
         if (!descriptor.exists()) return null
-        return runCatching { json.decodeFromString<ModelPack>(descriptor.readText()) }.getOrNull()
+        return runCatching { json.decodeFromString<ModelPack>(descriptor.readText()) }
+            .onFailure {
+                // Without this a malformed descriptor makes the pack silently invisible in
+                // settings, which is indistinguishable from never having downloaded it.
+                logcat(LogPriority.ERROR, it) { "Unreadable pack descriptor for $packId" }
+            }
+            .getOrNull()
     }
 
     /** Every pack currently on disk. */
@@ -149,12 +155,21 @@ class ModelRepository(
                     part.sink().buffer().use { sink ->
                         val source = body.source()
                         val buffer = okio.Buffer()
+                        // A 263 MB pack read in 8 KB chunks is ~32000 emissions, each one
+                        // recomposing the settings screen on the main thread. Report on a time
+                        // interval instead; the bar is smooth either way and the UI stays
+                        // responsive enough to cancel.
+                        var lastReport = 0L
                         while (true) {
                             val read = source.read(buffer, DOWNLOAD_CHUNK)
                             if (read == -1L) break
                             sink.write(buffer, read)
                             completedBytes += read
-                            trySend(DownloadProgress(pack.id, file.name, completedBytes, total))
+                            val now = System.currentTimeMillis()
+                            if (now - lastReport >= PROGRESS_INTERVAL_MS) {
+                                lastReport = now
+                                trySend(DownloadProgress(pack.id, file.name, completedBytes, total))
+                            }
                         }
                     }
                 }
@@ -202,6 +217,9 @@ class ModelRepository(
         const val PACK_DESCRIPTOR = "pack.json"
         private const val MODELS_DIR = "translation-models"
         private const val DOWNLOAD_CHUNK = 64L * 1024L
+
+        /** Progress is reported on this cadence rather than per chunk. See the read loop. */
+        private const val PROGRESS_INTERVAL_MS = 150L
     }
 }
 

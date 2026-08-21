@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -198,7 +199,10 @@ private fun ErrorMessage(error: Error?) {
     // of blanking on the first frame of the exit animation. Keying remember on `error` would do
     // the opposite - it would drop the message precisely when it is still needed.
     var remembered by remember { mutableStateOf<Error?>(null) }
-    if (error != null) remembered = error
+    // Assigned from SideEffect, not straight from the composable body. Writing snapshot state
+    // during composition that the same composition reads invalidates the scope that just ran,
+    // which is a recomposition loop rather than a one-off update.
+    SideEffect { if (error != null) remembered = error }
     AnimatedVisibility(
         visible = error != null,
         enter = fadeIn() + expandVertically(),

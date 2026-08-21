@@ -33,9 +33,11 @@ android {
     defaultConfig {
         applicationId = "app.yaku"
 
-        // app.yaku has never been published, so this is genuinely its first version.
-        // Inheriting Mihon's 29 would leave no room to ever renumber.
-        versionCode = 1
+        // Above Mihon's 29 rather than restarting at 1. app.yaku itself has never been
+        // published, but app.yaku.dev has, and Android refuses to install a lower versionCode
+        // over an existing app - so restarting the count made debug builds silently fail to
+        // install over earlier ones, which is indistinguishable from a fix not working.
+        versionCode = 30
         versionName = "1.0"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getLatestCommitCount()}\"")

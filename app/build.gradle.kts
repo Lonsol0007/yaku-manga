@@ -38,7 +38,7 @@ android {
         // over an existing app - so restarting the count made debug builds silently fail to
         // install over earlier ones, which is indistinguishable from a fix not working.
         versionCode = 30
-        versionName = "1.0"
+        versionName = "1.1"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getLatestCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getLatestCommitSha()}\"")

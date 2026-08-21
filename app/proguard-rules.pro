@@ -99,3 +99,20 @@
     public <init>();
     public void destroy();
 }
+
+# ONNX Runtime
+#
+# Its native library resolves Java classes, fields and methods through JNI by *name*
+# (FindClass / GetMethodID / GetFieldID), which R8 cannot see. Renaming any of them makes
+# GetMethodID return null, and ONNX aborts the process with
+# "JNI DETECTED ERROR IN APPLICATION: mid == null" instead of throwing - so the app dies the
+# first time a model is opened in a minified build, while debug builds work perfectly.
+-keep class ai.onnxruntime.** { *; }
+-keepclasseswithmembernames class ai.onnxruntime.** {
+    native <methods>;
+}
+-keepclassmembers class ai.onnxruntime.** {
+    <init>(...);
+    <fields>;
+}
+-dontwarn ai.onnxruntime.**

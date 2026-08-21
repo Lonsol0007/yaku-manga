@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okio.Buffer
 import okio.buffer
 import okio.sink
@@ -88,14 +89,18 @@ class LinkTranslateViewModel(
         // A link that was itself an image arrives with its bytes already downloaded; reusing
         // them avoids pulling the same file twice.
         var prefetched: ByteArray? = null
+        var pageUrl: HttpUrl? = null
         val urls = when (val result = extractor.imagesFrom(url)) {
             is LinkImageExtractor.Result.SingleImage -> {
                 prefetched = result.bytes
                 listOf(result.url)
             }
-            is LinkImageExtractor.Result.Images -> result.urls
+            is LinkImageExtractor.Result.Images -> {
+                pageUrl = url.toHttpUrlOrNull()
+                result.urls
+            }
             LinkImageExtractor.Result.BadUrl -> return fail(Error.BadUrl)
-            LinkImageExtractor.Result.NoImages -> return fail(Error.NoImages)
+            is LinkImageExtractor.Result.NoImages -> return fail(Error.NoImages(result.detail))
             is LinkImageExtractor.Result.UnsupportedType ->
                 return fail(Error.UnsupportedType(result.contentType))
             is LinkImageExtractor.Result.HttpError -> return fail(Error.Http(result.code))
@@ -105,7 +110,7 @@ class LinkTranslateViewModel(
         _state.update { it.copy(stage = Stage.Translating(done = 0, total = urls.size)) }
 
         urls.forEachIndexed { index, imageUrl ->
-            val page = runCatching { translateOne(imageUrl, index, prefetched) }
+            val page = runCatching { translateOne(imageUrl, index, prefetched, pageUrl) }
                 .onFailure { logcat(LogPriority.WARN, it) { "Failed on $imageUrl" } }
                 .getOrNull()
 
@@ -131,11 +136,16 @@ class LinkTranslateViewModel(
         url: HttpUrl,
         index: Int,
         prefetched: ByteArray?,
+        pageUrl: HttpUrl?,
     ): Page = withContext(Dispatchers.IO) {
         val bytes = if (prefetched != null) {
             Buffer().write(prefetched).use { pageTranslator.translate(it).readByteArray() }
         } else {
-            client.newCall(GET(url.toString())).await().use { response ->
+            // Present the page the image belongs to; hosts reject bare hotlinks with 403.
+            val request = pageUrl
+                ?.let { GET(url.toString(), LinkImageExtractor.refererHeaders(it)) }
+                ?: GET(url.toString())
+            client.newCall(request).await().use { response ->
                 check(response.isSuccessful) { "HTTP ${response.code}" }
                 response.body.source().use { pageTranslator.translate(it).readByteArray() }
             }
@@ -182,7 +192,7 @@ class LinkTranslateViewModel(
     @Immutable
     sealed interface Error {
         data object BadUrl : Error
-        data object NoImages : Error
+        data class NoImages(val detail: String) : Error
         data object AllFailed : Error
         data object TranslationOff : Error
         data class UnsupportedType(val contentType: String) : Error

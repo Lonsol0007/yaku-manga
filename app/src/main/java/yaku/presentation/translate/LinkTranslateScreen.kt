@@ -221,7 +221,7 @@ private fun ErrorMessage(error: Error?) {
 @Composable
 private fun messageFor(error: Error): String = when (error) {
     Error.BadUrl -> stringResource(MR.strings.translate_link_error_bad_url)
-    Error.NoImages -> stringResource(MR.strings.translate_link_error_no_images)
+    is Error.NoImages -> error.detail
     Error.AllFailed -> stringResource(MR.strings.translate_link_error_all_failed)
     Error.TranslationOff -> stringResource(MR.strings.translate_link_error_disabled)
     is Error.UnsupportedType ->

@@ -5,10 +5,13 @@ import eu.kanade.tachiyomi.network.await
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
+import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 import yaku.core.common.util.system.logcat
 
 /**
@@ -16,7 +19,7 @@ import yaku.core.common.util.system.logcat
  *
  * A link is either an image or a document that contains images, and which one it is cannot be
  * told from the URL: plenty of image hosts serve `/p/AbC123` with no extension, and plenty of
- * chapter readers use `.php`. So the content type of the response decides, not the path.
+ * chapter readers use `.php`. The response decides, not the path.
  */
 class LinkImageExtractor(private val client: OkHttpClient) {
 
@@ -44,59 +47,170 @@ class LinkImageExtractor(private val client: OkHttpClient) {
             if (!it.isSuccessful) return@withContext Result.HttpError(it.code)
 
             val contentType = it.header("Content-Type").orEmpty().substringBefore(';').trim()
-            when {
-                // The body is already downloaded by the time the type is known, so hand it back
-                // rather than making the caller fetch the same bytes a second time.
-                contentType.startsWith("image/") -> Result.SingleImage(url, it.body.bytes())
-                contentType.startsWith("text/html") || contentType.contains("xhtml") -> {
-                    val images = extractFromHtml(it.body.string(), url)
-                    if (images.isEmpty()) Result.NoImages else Result.Images(images)
-                }
-                else -> Result.UnsupportedType(contentType.ifBlank { "unknown" })
+            val body = it.body.bytes()
+
+            // Content-Type is a claim, not a fact. Image hosts serve pages as
+            // application/octet-stream often enough that trusting the header alone rejects real
+            // images, so fall back to the file's own magic bytes.
+            if (contentType.startsWith("image/") || looksLikeImage(body)) {
+                return@withContext Result.SingleImage(url, body)
+            }
+
+            val html = String(body)
+            if (!contentType.startsWith("text/html") && !contentType.contains("xhtml") &&
+                !html.trimStart().startsWith("<", ignoreCase = true)
+            ) {
+                return@withContext Result.UnsupportedType(contentType.ifBlank { "unknown" })
+            }
+
+            val document = Jsoup.parse(html, url.toString())
+            val images = extractFromHtml(document)
+            if (images.isNotEmpty()) {
+                Result.Images(images)
+            } else {
+                Result.NoImages(describeWhyEmpty(document, html))
             }
         }
     }
 
     /**
-     * Pull page images out of a chapter or gallery document.
+     * Collect page images from a chapter or gallery document.
      *
-     * Readers rarely put the page in a plain `src`: it is usually behind a lazy-loading attribute
-     * with a placeholder in `src`, so those are checked first. Everything is resolved against the
-     * document's own base URL, since relative paths are the norm.
+     * Readers hide the real page URL in a surprising number of places, so this looks in all of
+     * them rather than a fixed attribute list:
+     *
+     * - any attribute on `img`/`source` whose value looks like an image, since lazy-loading
+     *   libraries invent their own names (`data-src`, `data-lazy`, `data-original`, `data-echo`…)
+     * - `<noscript>` fallbacks, which Jsoup keeps as *text*, so they need re-parsing
+     * - `<a href>` pointing at an image, the usual shape of a gallery thumbnail grid
+     * - CSS `background-image: url(...)`
+     * - inline scripts, where readers commonly embed the whole page list as a JSON array
      */
-    private fun extractFromHtml(html: String, base: HttpUrl): List<HttpUrl> {
-        val document = Jsoup.parse(html, base.toString())
+    private fun extractFromHtml(document: Document): List<HttpUrl> {
+        val base = document.baseUri()
+        val found = LinkedHashSet<String>()
 
-        return document.select("img, source")
-            .asSequence()
-            .mapNotNull { element ->
-                LAZY_ATTRIBUTES
-                    .firstNotNullOfOrNull { attribute ->
-                        element.attr("abs:$attribute").takeIf { it.isNotBlank() }
-                    }
-                    ?.let { candidate ->
-                        // srcset holds "url 1x, url 2x"; the first entry is enough.
-                        candidate.substringBefore(',').trim().substringBefore(' ')
-                    }
-                    ?.toHttpUrlOrNull()
-                    ?.takeUnless { looksLikeChrome(element.attr("width"), element.attr("height")) }
+        document.select("img, source").forEach { element ->
+            element.attributes().forEach { attribute ->
+                val value = attribute.value
+                if (looksLikeImageUrl(value) && !isChrome(element)) {
+                    // srcset holds "url 1x, url 2x"; the first entry is enough.
+                    found += value.substringBefore(',').trim().substringBefore(' ')
+                }
             }
+        }
+
+        // Jsoup treats noscript content as text, so its markup has to be parsed a second time.
+        document.select("noscript").forEach { noscript ->
+            Jsoup.parse(noscript.text(), base).select("img").forEach { img ->
+                img.attributes().forEach { attribute ->
+                    if (looksLikeImageUrl(attribute.value)) found += attribute.value
+                }
+            }
+        }
+
+        document.select("a[href]").forEach { anchor ->
+            val href = anchor.attr("href")
+            if (hasImageExtension(href)) found += href
+        }
+
+        document.select("[style*=background-image]").forEach { element ->
+            BACKGROUND_URL.findAll(element.attr("style")).forEach { found += it.groupValues[1] }
+        }
+
+        // Readers frequently ship the page list as JSON inside a <script>, with the URLs
+        // backslash-escaped. Pulling them straight out of the source is what makes a
+        // JavaScript-driven reader work at all without running its JavaScript.
+        document.select("script").forEach { script ->
+            SCRIPT_URL.findAll(script.data()).forEach { match ->
+                found += match.value.trim('"', '\'').replace("\\/", "/")
+            }
+        }
+
+        return found
+            .asSequence()
+            .map { it.trim() }
+            .filterNot { it.isEmpty() || it.startsWith("data:") }
+            .mapNotNull { candidate ->
+                // Resolve relatives against the document; absolute values pass through unchanged.
+                runCatching { base.toHttpUrlOrNull()?.resolve(candidate) }.getOrNull()
+            }
+            .filterNot { looksLikeDecoration(it) }
             .distinct()
             .take(MAX_IMAGES)
             .toList()
     }
 
     /**
-     * Drop images the page itself declares as tiny.
+     * Explain an empty result in terms of what the page contained.
      *
-     * Site chrome - logos, share buttons, spacer gifs - carries explicit small dimensions far more
-     * often than page scans do, and translating a 16px icon costs a full model pass to produce
-     * nothing. Images with no declared size are kept: absence of a hint is not evidence.
+     * "No images found" is true but useless. A reader that builds itself in JavaScript, a page
+     * behind a login wall and a genuine mistake in the URL all need different responses from the
+     * person holding the phone.
      */
-    private fun looksLikeChrome(width: String, height: String): Boolean {
-        val w = width.toIntOrNull()
-        val h = height.toIntOrNull()
+    private fun describeWhyEmpty(document: Document, html: String): String {
+        val imgCount = document.select("img, source").size
+        val scriptCount = document.select("script").size
+        val title = document.title().take(60)
+
+        return when {
+            html.length < SUSPICIOUSLY_SHORT && scriptCount > 0 ->
+                "The page is built by JavaScript (${html.length} bytes of HTML, $scriptCount " +
+                    "scripts, no images in the source). Try the direct image URL instead."
+            imgCount == 0 && scriptCount > 0 ->
+                "No <img> tags in the source, only $scriptCount scripts - this reader draws its " +
+                    "pages with JavaScript. Try the direct image URL instead."
+            imgCount == 0 ->
+                "The page has no images at all${if (title.isNotBlank()) " (\"$title\")" else ""}."
+            else ->
+                "Found $imgCount image tags, but none looked like manga pages - they may be " +
+                    "icons, or the pages may load from JavaScript."
+        }
+    }
+
+    /** True when the page itself declares the element as small enough to be site furniture. */
+    private fun isChrome(element: Element): Boolean {
+        val w = element.attr("width").toIntOrNull()
+        val h = element.attr("height").toIntOrNull()
         return (w != null && w < MIN_DIMENSION) || (h != null && h < MIN_DIMENSION)
+    }
+
+    /**
+     * Drop by filename what could not be dropped by declared size.
+     *
+     * Most pages carry a logo, avatars and ad slots with no width/height set. Each one otherwise
+     * costs a full detect-recognise-translate pass to produce nothing.
+     */
+    private fun looksLikeDecoration(url: HttpUrl): Boolean {
+        val path = url.encodedPath.lowercase()
+        return DECORATION_HINTS.any { path.contains(it) }
+    }
+
+    private fun looksLikeImageUrl(value: String): Boolean =
+        value.length in 4..2048 &&
+            !value.startsWith("data:") &&
+            (hasImageExtension(value) || value.startsWith("http") || value.startsWith("//"))
+
+    private fun hasImageExtension(value: String): Boolean {
+        val path = value.substringBefore('?').substringBefore('#').lowercase()
+        return IMAGE_EXTENSIONS.any { path.endsWith(it) }
+    }
+
+    /** Identify an image by its own header rather than by what the server claimed. */
+    private fun looksLikeImage(bytes: ByteArray): Boolean {
+        if (bytes.size < 12) return false
+        fun at(index: Int) = bytes[index].toInt() and 0xFF
+        return when {
+            at(0) == 0xFF && at(1) == 0xD8 && at(2) == 0xFF -> true // JPEG
+            at(0) == 0x89 && at(1) == 0x50 && at(2) == 0x4E -> true // PNG
+            at(0) == 0x47 && at(1) == 0x49 && at(2) == 0x46 -> true // GIF
+            at(0) == 0x42 && at(1) == 0x4D -> true // BMP
+            // RIFF....WEBP
+            at(0) == 0x52 && at(1) == 0x49 && at(8) == 0x57 && at(9) == 0x45 -> true
+            // ....ftyp - AVIF and HEIC
+            at(4) == 0x66 && at(5) == 0x74 && at(6) == 0x79 && at(7) == 0x70 -> true
+            else -> false
+        }
     }
 
     sealed interface Result {
@@ -110,22 +224,41 @@ class LinkImageExtractor(private val client: OkHttpClient) {
 
         data class Images(val urls: List<HttpUrl>) : Result
         data object BadUrl : Result
-        data object NoImages : Result
+        data class NoImages(val detail: String) : Result
         data class UnsupportedType(val contentType: String) : Result
         data class HttpError(val code: Int) : Result
         data class Unreachable(val reason: String) : Result
     }
 
-    private companion object {
-        val LAZY_ATTRIBUTES = listOf(
-            "data-src",
-            "data-original",
-            "data-lazy-src",
-            "data-srcset",
-            "srcset",
-            "src",
+    companion object {
+        /**
+         * Sent when fetching page images.
+         *
+         * Image hosts routinely reject requests that arrive without the page they belong to,
+         * so a scrape that finds the right URLs still gets 403s on every one of them.
+         */
+        fun refererHeaders(pageUrl: HttpUrl): Headers = Headers.Builder()
+            .add("Referer", pageUrl.toString())
+            .build()
+
+        private val IMAGE_EXTENSIONS =
+            listOf(".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif", ".jfif")
+
+        private val DECORATION_HINTS = listOf(
+            "logo", "icon", "favicon", "avatar", "sprite", "banner",
+            "advert", "/ads/", "placeholder", "spinner", "loading",
         )
-        const val MAX_IMAGES = 60
-        const val MIN_DIMENSION = 120
+
+        private val BACKGROUND_URL = Regex("""url\(\s*['"]?([^'")]+)['"]?\s*\)""")
+
+        /** Quoted URLs ending in an image extension, including JSON-escaped slashes. */
+        private val SCRIPT_URL = Regex(
+            """["'](?:https?:)?(?:\\?/\\?/|/)[^"'\s]{4,400}?\.(?:jpg|jpeg|png|webp|gif|avif)(?:\?[^"'\s]{0,200})?["']""",
+            RegexOption.IGNORE_CASE,
+        )
+
+        private const val MAX_IMAGES = 60
+        private const val MIN_DIMENSION = 120
+        private const val SUSPICIOUSLY_SHORT = 4096
     }
 }

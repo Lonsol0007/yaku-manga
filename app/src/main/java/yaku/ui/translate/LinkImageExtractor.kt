@@ -2,6 +2,8 @@ package yaku.ui.translate
 
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.await
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -18,20 +20,28 @@ import yaku.core.common.util.system.logcat
  */
 class LinkImageExtractor(private val client: OkHttpClient) {
 
-    suspend fun imagesFrom(rawUrl: String): Result {
+    /**
+     * Must run off the main thread.
+     *
+     * `Call.await()` resumes through the caller's dispatcher, and the caller is a viewModelScope
+     * coroutine on `Dispatchers.Main.immediate`. Reading the body afterwards - `bytes()` or
+     * `string()` - pulls from the socket, and doing that on the main thread is a
+     * NetworkOnMainThreadException, which kills the process rather than surfacing as an error.
+     */
+    suspend fun imagesFrom(rawUrl: String): Result = withContext(Dispatchers.IO) {
         val url = rawUrl.trim().let {
             if (it.startsWith("http://") || it.startsWith("https://")) it else "https://$it"
-        }.toHttpUrlOrNull() ?: return Result.BadUrl
+        }.toHttpUrlOrNull() ?: return@withContext Result.BadUrl
 
         val response = try {
             client.newCall(GET(url.toString())).await()
         } catch (e: Exception) {
             logcat(LogPriority.WARN, e) { "Could not fetch $url" }
-            return Result.Unreachable(e.message ?: "")
+            return@withContext Result.Unreachable(e.message ?: e::class.simpleName.orEmpty())
         }
 
-        return response.use {
-            if (!it.isSuccessful) return Result.HttpError(it.code)
+        response.use {
+            if (!it.isSuccessful) return@withContext Result.HttpError(it.code)
 
             val contentType = it.header("Content-Type").orEmpty().substringBefore(';').trim()
             when {

@@ -12,6 +12,7 @@ import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.await
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,49 +68,62 @@ class LinkTranslateViewModel(
         }
 
         job = viewModelScope.launch {
-            _state.update { it.copy(stage = Stage.Fetching, pages = emptyList(), error = null) }
-            resetOutputDir()
-
-            // A link that was itself an image arrives with its bytes already downloaded; reusing
-            // them avoids pulling the same file twice.
-            var prefetched: ByteArray? = null
-            val urls = when (val result = extractor.imagesFrom(url)) {
-                is LinkImageExtractor.Result.SingleImage -> {
-                    prefetched = result.bytes
-                    listOf(result.url)
+            // An exception escaping a viewModelScope coroutine reaches the default handler and
+            // takes the process down. Nothing in a translation run is worth crashing over - the
+            // worst honest outcome is telling the user it did not work.
+            runCatching { runTranslation(url) }
+                .onFailure { failure ->
+                    if (failure is CancellationException) throw failure
+                    logcat(LogPriority.ERROR, failure) { "Link translation failed" }
+                    fail(Error.Unreachable(failure.message ?: failure::class.simpleName.orEmpty()))
                 }
-                is LinkImageExtractor.Result.Images -> result.urls
-                LinkImageExtractor.Result.BadUrl -> return@launch fail(Error.BadUrl)
-                LinkImageExtractor.Result.NoImages -> return@launch fail(Error.NoImages)
-                is LinkImageExtractor.Result.UnsupportedType ->
-                    return@launch fail(Error.UnsupportedType(result.contentType))
-                is LinkImageExtractor.Result.HttpError -> return@launch fail(Error.Http(result.code))
-                is LinkImageExtractor.Result.Unreachable -> return@launch fail(Error.Unreachable(result.reason))
+        }
+    }
+
+    private suspend fun runTranslation(url: String) {
+        // Off the main thread: deleting a directory of translated pages is disk work, and this
+        // coroutine runs on Dispatchers.Main.immediate.
+        withContext(Dispatchers.IO) { resetOutputDir() }
+
+        // A link that was itself an image arrives with its bytes already downloaded; reusing
+        // them avoids pulling the same file twice.
+        var prefetched: ByteArray? = null
+        val urls = when (val result = extractor.imagesFrom(url)) {
+            is LinkImageExtractor.Result.SingleImage -> {
+                prefetched = result.bytes
+                listOf(result.url)
             }
+            is LinkImageExtractor.Result.Images -> result.urls
+            LinkImageExtractor.Result.BadUrl -> return fail(Error.BadUrl)
+            LinkImageExtractor.Result.NoImages -> return fail(Error.NoImages)
+            is LinkImageExtractor.Result.UnsupportedType ->
+                return fail(Error.UnsupportedType(result.contentType))
+            is LinkImageExtractor.Result.HttpError -> return fail(Error.Http(result.code))
+            is LinkImageExtractor.Result.Unreachable -> return fail(Error.Unreachable(result.reason))
+        }
 
-            _state.update { it.copy(stage = Stage.Translating(done = 0, total = urls.size)) }
+        _state.update { it.copy(stage = Stage.Translating(done = 0, total = urls.size)) }
 
-            urls.forEachIndexed { index, imageUrl ->
-                val page = runCatching { translateOne(imageUrl, index, prefetched) }
-                    .onFailure { logcat(LogPriority.WARN, it) { "Failed on $imageUrl" } }
-                    .getOrNull()
+        urls.forEachIndexed { index, imageUrl ->
+            val page = runCatching { translateOne(imageUrl, index, prefetched) }
+                .onFailure { logcat(LogPriority.WARN, it) { "Failed on $imageUrl" } }
+                .getOrNull()
 
-                _state.update { current ->
-                    current.copy(
-                        // Pages appear as they finish; on a long chapter the first page is
-                        // readable while the rest are still going.
-                        pages = if (page != null) current.pages + page else current.pages,
-                        stage = Stage.Translating(done = index + 1, total = urls.size),
-                    )
-                }
-            }
-
-            _state.update {
-                it.copy(
-                    stage = Stage.Idle,
-                    error = if (it.pages.isEmpty()) Error.AllFailed else null,
+            _state.update { current ->
+                current.copy(
+                    // Pages appear as they finish; on a long chapter the first page is
+                    // readable while the rest are still going.
+                    pages = if (page != null) current.pages + page else current.pages,
+                    stage = Stage.Translating(done = index + 1, total = urls.size),
                 )
             }
+        }
+
+        _state.update {
+            it.copy(
+                stage = Stage.Idle,
+                error = if (it.pages.isEmpty()) Error.AllFailed else null,
+            )
         }
     }
 

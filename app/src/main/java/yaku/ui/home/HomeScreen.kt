@@ -43,7 +43,8 @@ import soup.compose.material.motion.animation.materialFadeThroughIn
 import soup.compose.material.motion.animation.materialFadeThroughOut
 import yaku.app.di.appGraph
 import yaku.i18n.MR
-import yaku.presentation.core.components.material.NavigationBar
+import yaku.presentation.components.YakuTaskbar
+import yaku.presentation.components.YakuTaskbarScope
 import yaku.presentation.core.components.material.NavigationRail
 import yaku.presentation.core.components.material.Scaffold
 import yaku.presentation.core.i18n.pluralStringResource
@@ -108,9 +109,9 @@ object HomeScreen : Screen() {
                                 enter = expandVertically(),
                                 exit = shrinkVertically(),
                             ) {
-                                NavigationBar {
+                                YakuTaskbar {
                                     TABS.fastForEach {
-                                        NavigationBarItem(it)
+                                        TaskbarItem(it)
                                     }
                                 }
                             }
@@ -181,12 +182,12 @@ object HomeScreen : Screen() {
     }
 
     @Composable
-    private fun RowScope.NavigationBarItem(tab: yaku.presentation.util.Tab) {
+    private fun YakuTaskbarScope.TaskbarItem(tab: yaku.presentation.util.Tab) {
         val tabNavigator = LocalTabNavigator.current
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
         val selected = tabNavigator.current::class == tab::class
-        NavigationBarItem(
+        Item(
             selected = selected,
             onClick = {
                 if (!selected) {
@@ -195,16 +196,8 @@ object HomeScreen : Screen() {
                     scope.launch { tab.onReselect(navigator) }
                 }
             },
+            label = tab.options.title,
             icon = { NavigationIconItem(tab) },
-            label = {
-                Text(
-                    text = tab.options.title,
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
-            alwaysShowLabel = true,
         )
     }
 

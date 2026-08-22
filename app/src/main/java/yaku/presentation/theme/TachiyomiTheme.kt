@@ -23,6 +23,7 @@ import yaku.presentation.theme.colorscheme.TakoColorScheme
 import yaku.presentation.theme.colorscheme.TealTurqoiseColorScheme
 import yaku.presentation.theme.colorscheme.TidalWaveColorScheme
 import yaku.presentation.theme.colorscheme.TokyoNightColorScheme
+import yaku.presentation.theme.colorscheme.YakuColorScheme
 import yaku.presentation.theme.colorscheme.YinYangColorScheme
 import yaku.presentation.theme.colorscheme.YotsubaColorScheme
 
@@ -66,6 +67,7 @@ private fun BaseTachiyomiTheme(
             )
         },
         typography = YakuTypography,
+        shapes = YakuShapes,
         content = content,
     )
 }
@@ -79,7 +81,7 @@ private fun getThemeColorScheme(
     val colorScheme = if (appTheme == AppTheme.MONET) {
         MonetColorScheme(context)
     } else {
-        colorSchemes.getOrDefault(appTheme, TachiyomiColorScheme)
+        colorSchemes.getOrDefault(appTheme, YakuColorScheme)
     }
     return colorScheme.getColorScheme(
         isDark = isDark,
@@ -89,7 +91,7 @@ private fun getThemeColorScheme(
 }
 
 private val colorSchemes: Map<AppTheme, BaseColorScheme> = mapOf(
-    AppTheme.DEFAULT to TachiyomiColorScheme,
+    AppTheme.DEFAULT to YakuColorScheme,
     AppTheme.CATPPUCCIN to CatppuccinColorScheme,
     AppTheme.TOKYONIGHT to TokyoNightColorScheme,
     AppTheme.GREEN_APPLE to GreenAppleColorScheme,

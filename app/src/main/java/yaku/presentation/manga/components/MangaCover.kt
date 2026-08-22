@@ -25,7 +25,10 @@ enum class MangaCover(val ratio: Float) {
         data: Any?,
         modifier: Modifier = Modifier,
         contentDescription: String = "",
-        shape: Shape = MaterialTheme.shapes.extraSmall,
+        // shapes.small, not extraSmall. Covers appear in the library grid, browse results,
+        // updates and history, so their corner radius sets the texture of most of the app -
+        // it is the cheapest single change that stops it reading as stock Material.
+        shape: Shape = MaterialTheme.shapes.small,
         onClick: (() -> Unit)? = null,
     ) {
         AsyncImage(

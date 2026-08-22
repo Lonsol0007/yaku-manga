@@ -165,8 +165,12 @@ fun AppBarTitle(
 ) {
     Column(modifier = modifier) {
         title?.let {
+            // Larger and heavier than Material's app-bar default, sitting over a smaller muted
+            // subtitle. That pairing is the header rhythm the whole design is built on.
             Text(
                 text = it,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -174,7 +178,8 @@ fun AppBarTitle(
         subtitle?.let {
             Text(
                 text = it,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.basicMarquee(

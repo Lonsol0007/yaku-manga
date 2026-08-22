@@ -37,8 +37,8 @@ android {
         // published, but app.yaku.dev has, and Android refuses to install a lower versionCode
         // over an existing app - so restarting the count made debug builds silently fail to
         // install over earlier ones, which is indistinguishable from a fix not working.
-        versionCode = 31
-        versionName = "1.2"
+        versionCode = 32
+        versionName = "1.2.1"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getLatestCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getLatestCommitSha()}\"")

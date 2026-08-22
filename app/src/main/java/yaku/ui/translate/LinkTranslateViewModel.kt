@@ -28,6 +28,9 @@ import okio.Buffer
 import okio.buffer
 import okio.sink
 import yaku.core.common.util.system.logcat
+import yaku.data.saver.Image
+import yaku.data.saver.ImageSaver
+import yaku.data.saver.Location
 import yaku.ui.reader.translation.PageTranslator
 import java.io.File
 
@@ -38,6 +41,7 @@ class LinkTranslateViewModel(
     private val context: Context,
     networkHelper: NetworkHelper,
     private val pageTranslator: PageTranslator,
+    private val imageSaver: ImageSaver,
 ) : ViewModel() {
 
     private val client = networkHelper.client
@@ -156,6 +160,49 @@ class LinkTranslateViewModel(
         Page(source = url.toString(), file = file)
     }
 
+    /**
+     * Drop the translated pages.
+     *
+     * They live in the cache directory, so leaving them costs disk until the next run replaces
+     * them - and a screen still full of the last chapter is a poor starting point for the next.
+     */
+    fun clear() {
+        job?.cancel()
+        job = null
+        _state.update { State(url = it.url) }
+        viewModelScope.launch { withContext(Dispatchers.IO) { resetOutputDir() } }
+    }
+
+    /**
+     * Copy the translated pages into the gallery.
+     *
+     * Everything this screen produces is otherwise cache, which Android may delete at any time
+     * and which `clear` deletes deliberately. Saving is the only way to keep a result.
+     */
+    fun save() {
+        val pages = _state.value.pages
+        if (pages.isEmpty()) return
+
+        viewModelScope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                pages.count { page ->
+                    runCatching {
+                        imageSaver.save(
+                            Image.Page(
+                                inputStream = { page.file.inputStream() },
+                                name = page.file.nameWithoutExtension,
+                                location = Location.Pictures.create(),
+                            ),
+                        )
+                    }
+                        .onFailure { logcat(LogPriority.WARN, it) { "Could not save ${page.file}" } }
+                        .isSuccess
+                }
+            }
+            _state.update { it.copy(savedCount = saved) }
+        }
+    }
+
     private fun fail(error: Error) {
         _state.update { it.copy(stage = Stage.Idle, error = error) }
     }
@@ -175,6 +222,8 @@ class LinkTranslateViewModel(
         val stage: Stage = Stage.Idle,
         val pages: List<Page> = emptyList(),
         val error: Error? = null,
+        /** Pages written to the gallery by the last save, or null if none has run. */
+        val savedCount: Int? = null,
     ) {
         val isWorking: Boolean get() = stage != Stage.Idle
     }

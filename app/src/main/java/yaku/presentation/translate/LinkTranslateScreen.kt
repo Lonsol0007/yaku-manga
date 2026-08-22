@@ -51,6 +51,8 @@ fun LinkTranslateScreen(
     onUrlChange: (String) -> Unit,
     onTranslate: () -> Unit,
     onCancel: () -> Unit,
+    onClear: () -> Unit,
+    onSave: () -> Unit,
 ) {
     Scaffold(
         topBar = { scrollBehavior ->
@@ -101,6 +103,31 @@ fun LinkTranslateScreen(
                                 Text(stringResource(MR.strings.action_cancel))
                             }
                         }
+                        // Only meaningful once there is something to act on, and results
+                        // otherwise sit on screen until the next run replaces them.
+                        AnimatedVisibility(
+                            visible = state.pages.isNotEmpty() && !state.isWorking,
+                            enter = fadeIn() + expandHorizontally(),
+                            exit = fadeOut() + shrinkHorizontally(),
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = onSave) {
+                                    Text(stringResource(MR.strings.action_save))
+                                }
+                                OutlinedButton(onClick = onClear) {
+                                    Text(stringResource(MR.strings.action_clear))
+                                }
+                            }
+                        }
+                    }
+
+                    // Confirms where the pages went; saving otherwise looks like nothing at all.
+                    state.savedCount?.let { count ->
+                        Text(
+                            text = stringResource(MR.strings.translate_link_saved, count),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
 
                     AnimatedVisibility(

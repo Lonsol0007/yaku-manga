@@ -91,12 +91,12 @@ class LinkImageExtractor(private val client: OkHttpClient) {
         val found = LinkedHashSet<String>()
 
         document.select("img, source").forEach { element ->
-            element.attributes().forEach { attribute ->
-                val value = attribute.value
-                if (looksLikeImageUrl(value) && !isChrome(element)) {
-                    // srcset holds "url 1x, url 2x"; the first entry is enough.
-                    found += value.substringBefore(',').trim().substringBefore(' ')
-                }
+            if (!isChrome(element)) {
+                // One URL per element, best first. Taking every matching attribute collects the
+                // low-resolution placeholder sitting in src *as well as* the full page in
+                // data-src, and the placeholder usually wins - which is how a chapter comes back
+                // as a wall of thumbnails.
+                bestAttribute(element)?.let { found += it }
             }
         }
 
@@ -139,6 +139,26 @@ class LinkImageExtractor(private val client: OkHttpClient) {
             .distinct()
             .take(MAX_IMAGES)
             .toList()
+    }
+
+    /**
+     * The single best image URL an element offers.
+     *
+     * Lazy-loading markup carries two URLs: a placeholder in src, and the real page in one of
+     * the data attributes. Ranked names are tried first, and only if none of them match does it
+     * fall back to scanning every attribute - which keeps the flexibility that catches unusual
+     * loaders without letting a 20px placeholder outrank the page it stands in for.
+     */
+    private fun bestAttribute(element: Element): String? {
+        val ranked = PREFERRED_ATTRIBUTES.firstNotNullOfOrNull { name ->
+            element.attr(name).takeIf { it.isNotBlank() && looksLikeImageUrl(it) }
+        }
+        val value = ranked ?: element.attributes()
+            .map { it.value }
+            .firstOrNull { looksLikeImageUrl(it) }
+
+        // srcset holds "url 1x, url 2x"; the first entry is enough.
+        return value?.substringBefore(',')?.trim()?.substringBefore(' ')
     }
 
     /**
@@ -240,6 +260,17 @@ class LinkImageExtractor(private val client: OkHttpClient) {
         fun refererHeaders(pageUrl: HttpUrl): Headers = Headers.Builder()
             .add("Referer", pageUrl.toString())
             .build()
+
+        /** Highest-fidelity first: data attributes hold the page, src usually holds a stand-in. */
+        private val PREFERRED_ATTRIBUTES = listOf(
+            "data-src",
+            "data-original",
+            "data-lazy-src",
+            "data-full",
+            "data-srcset",
+            "srcset",
+            "src",
+        )
 
         private val IMAGE_EXTENSIONS =
             listOf(".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif", ".jfif")

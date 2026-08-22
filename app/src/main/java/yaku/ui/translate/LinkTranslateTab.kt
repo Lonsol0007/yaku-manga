@@ -33,6 +33,8 @@ data object LinkTranslateTab : Tab {
             onUrlChange = viewModel::updateUrl,
             onTranslate = viewModel::translate,
             onCancel = viewModel::cancel,
+            onClear = viewModel::clear,
+            onSave = viewModel::save,
         )
     }
 }

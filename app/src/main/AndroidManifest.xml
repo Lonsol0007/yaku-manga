@@ -78,6 +78,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
+                <!--
+                  yaku:// is ours; mihon:// stays because extension-repo pages publish
+                  "mihon://extension-store?url=..." links, and dropping it would make every
+                  one of those links fail to reach this app. Additive, not a rename.
+                -->
+                <data android:scheme="yaku" />
                 <data android:scheme="mihon" />
                 <data android:host="extension-store" />
             </intent-filter>
@@ -189,6 +195,13 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
+                <!--
+                  Deliberately still mihon://. These are OAuth redirect URIs registered with
+                  AniList, MyAnimeList, Bangumi, MangaBaka and Shikimori against client IDs
+                  inherited from upstream. The scheme is validated on their servers, so
+                  renaming it here breaks sign-in to all five with no way to fix it from this
+                  side - it needs new client registrations first.
+                -->
                 <data android:scheme="mihon" />
 
                 <data android:host="anilist-auth" />

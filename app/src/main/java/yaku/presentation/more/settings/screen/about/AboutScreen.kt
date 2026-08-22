@@ -162,7 +162,11 @@ object AboutScreen : Screen() {
                 item {
                     TextPreferenceWidget(
                         title = stringResource(MR.strings.privacy_policy),
-                        onPreferenceClick = { uriHandler.openUri("https://mihon.app/privacy/") },
+                        // Upstream's privacy policy describes upstream's app. This build has no
+                        // telemetry unless compiled in, and the README states exactly that.
+                        onPreferenceClick = {
+                            uriHandler.openUri("https://github.com/Lonsol0007/yaku-manga#privacy-posture")
+                        },
                     )
                 }
 
@@ -173,35 +177,19 @@ object AboutScreen : Screen() {
                             .padding(vertical = 8.dp),
                         horizontalArrangement = Arrangement.Center,
                     ) {
+                        // Upstream's Discord, X, Facebook and Reddit used to be listed here.
+                        // They are Mihon's community, not this app's, and sending people there
+                        // for support with a fork Mihon did not write is exactly what the README
+                        // asks users not to do.
                         LinkIcon(
                             label = stringResource(MR.strings.website),
                             icon = Icons.Outlined.Public,
-                            url = "https://mihon.app",
-                        )
-                        LinkIcon(
-                            label = "Discord",
-                            icon = CustomIcons.Discord,
-                            url = Constants.URL_DISCORD,
-                        )
-                        LinkIcon(
-                            label = "X",
-                            icon = CustomIcons.X,
-                            url = "https://x.com/mihonapp",
-                        )
-                        LinkIcon(
-                            label = "Facebook",
-                            icon = CustomIcons.Facebook,
-                            url = "https://facebook.com/mihonapp",
-                        )
-                        LinkIcon(
-                            label = "Reddit",
-                            icon = CustomIcons.Reddit,
-                            url = "https://www.reddit.com/r/mihonapp",
+                            url = "https://github.com/Lonsol0007/yaku-manga",
                         )
                         LinkIcon(
                             label = "GitHub",
                             icon = CustomIcons.Github,
-                            url = "https://github.com/mihonapp",
+                            url = "https://github.com/Lonsol0007/yaku-manga",
                         )
                     }
                 }

@@ -45,6 +45,9 @@ fun LibraryContent(
     getDisplayMode: (Int) -> PreferenceMutableState<LibraryDisplayMode>,
     getColumnsForOrientation: (Boolean) -> PreferenceMutableState<Int>,
     getItemsForCategory: (Category) -> List<LibraryItem>,
+    // Rendered above the category tabs and pager. A slot rather than the card itself, so this
+    // file keeps knowing only about laying the library out.
+    header: @Composable (() -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier.padding(
@@ -53,6 +56,8 @@ fun LibraryContent(
             end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
         ),
     ) {
+        header?.invoke()
+
         val pagerState = rememberPagerState(currentPage) { categories.size }
 
         val scope = rememberCoroutineScope()

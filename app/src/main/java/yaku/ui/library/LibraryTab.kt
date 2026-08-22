@@ -19,6 +19,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,11 +51,13 @@ import yaku.presentation.core.screens.EmptyScreenAction
 import yaku.presentation.core.screens.LoadingScreen
 import yaku.presentation.library.DeleteLibraryMangaDialog
 import yaku.presentation.library.LibrarySettingsDialog
+import yaku.presentation.library.components.ContinueReadingCard
 import yaku.presentation.library.components.LibraryContent
 import yaku.presentation.library.components.LibraryToolbar
 import yaku.presentation.manga.components.LibraryBottomActionMenu
 import yaku.presentation.more.onboarding.GETTING_STARTED_URL
 import yaku.presentation.util.Tab
+import yaku.presentation.util.formatChapterNumber
 import yaku.source.local.isLocal
 import yaku.ui.browse.source.globalsearch.GlobalSearchScreen
 import yaku.ui.category.CategoryScreen
@@ -180,6 +183,29 @@ data object LibraryTab : Tab {
                 }
                 else -> {
                     LibraryContent(
+                        header = state.continueReading?.let { resume ->
+                            {
+                                ContinueReadingCard(
+                                    coverData = resume.manga,
+                                    title = resume.manga.title,
+                                    subtitle = stringResource(
+                                        MR.strings.label_continue_reading_chapter,
+                                        formatChapterNumber(resume.chapter.chapterNumber),
+                                    ),
+                                    progress = null,
+                                    onClick = {
+                                        context.startActivity(
+                                            ReaderActivity.newIntent(
+                                                context,
+                                                resume.chapter.mangaId,
+                                                resume.chapter.id,
+                                            ),
+                                        )
+                                    },
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                )
+                            }
+                        },
                         categories = state.displayedCategories,
                         searchQuery = state.searchQuery,
                         selection = state.selection,

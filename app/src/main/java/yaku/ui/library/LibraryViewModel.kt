@@ -59,6 +59,7 @@ import yaku.domain.library.model.search.QueryNode
 import yaku.domain.library.model.sort
 import yaku.domain.library.service.LibraryPreferences
 import yaku.domain.manga.interactor.GetLibraryManga
+import yaku.domain.manga.interactor.GetManga
 import yaku.domain.manga.interactor.UpdateManga
 import yaku.domain.manga.model.Manga
 import yaku.domain.manga.model.MangaUpdate
@@ -81,6 +82,7 @@ class LibraryViewModel(
     private val getCategories: GetCategories,
     private val getTracksPerManga: GetTracksPerManga,
     private val getNextChapters: GetNextChapters,
+    private val getManga: GetManga,
     private val getChaptersByMangaId: GetChaptersByMangaId,
     private val getBookmarkedChaptersByMangaId: GetBookmarkedChaptersByMangaId,
     private val setReadStatus: SetReadStatus,
@@ -94,6 +96,31 @@ class LibraryViewModel(
     private val downloadCache: DownloadCache,
     private val trackerManager: TrackerManager,
 ) : ViewModel() {
+
+    private val continueReading = MutableStateFlow<ContinueReading?>(null)
+
+    init {
+        refreshContinueReading()
+    }
+
+    /**
+     * Resolve what "continue reading" should resume.
+     *
+     * getNextChapters(onlyUnread = false) is the same call the history screen uses for its
+     * resume action, so the card and that button always agree about where you left off rather
+     * than each deciding for themselves.
+     */
+    fun refreshContinueReading() {
+        viewModelScope.launchIO {
+            val chapter = getNextChapters.await(onlyUnread = false).firstOrNull()
+            val manga = chapter?.let { getManga.await(it.mangaId) }
+            continueReading.value = if (chapter != null && manga != null) {
+                ContinueReading(manga = manga, chapter = chapter)
+            } else {
+                null
+            }
+        }
+    }
 
     private val searchQuery = MutableStateFlow<String?>(null)
 
@@ -173,8 +200,10 @@ class LibraryViewModel(
         library,
         combine(searchQuery, selection, dialog, ::Triple),
         combine(activeCategoryIndex, displayPreferences, hasActiveFilters, ::Triple),
-    ) { library, (searchQuery, selection, dialog), (activeCategoryIndex, display, hasActiveFilters) ->
+        continueReading,
+    ) { library, (searchQuery, selection, dialog), (activeCategoryIndex, display, hasActiveFilters), continueReading ->
         State(
+            continueReading = continueReading,
             isLoading = library == null,
             searchQuery = searchQuery,
             selection = selection,
@@ -794,6 +823,13 @@ class LibraryViewModel(
         val favoritesById by lazy { favorites.associateBy { it.id } }
     }
 
+    /** The entry the library offers to resume, or null when nothing has been read yet. */
+    @Immutable
+    data class ContinueReading(
+        val manga: Manga,
+        val chapter: Chapter,
+    )
+
     @Immutable
     data class State(
         val isInitialized: Boolean = false,
@@ -804,6 +840,7 @@ class LibraryViewModel(
         val showCategoryTabs: Boolean = false,
         val showMangaCount: Boolean = false,
         val showMangaContinueButton: Boolean = false,
+        val continueReading: ContinueReading? = null,
         val dialog: Dialog? = null,
         val libraryData: LibraryData = LibraryData(),
         private val activeCategoryIndex: Int = 0,

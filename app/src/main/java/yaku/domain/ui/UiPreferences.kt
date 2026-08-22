@@ -3,7 +3,6 @@ package yaku.domain.ui
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.isDynamicColorAvailable
 import yaku.core.common.preference.Preference
 import yaku.core.common.preference.PreferenceStore
@@ -23,13 +22,18 @@ class UiPreferences(
 
     val themeMode: Preference<ThemeMode> = preferenceStore.getEnum("pref_theme_mode_key", ThemeMode.SYSTEM)
 
+    /**
+     * Yaku's own palette, not the wallpaper's.
+     *
+     * This defaulted to MONET wherever dynamic colour was available, which is every device on
+     * Android 12 and above - so the app painted itself from the user's wallpaper and its own
+     * colours were never seen unless someone went looking in settings. For an app whose point is
+     * that it is not the one it was forked from, shipping a theme that makes it look like every
+     * other Material You app is the wrong default. Monet remains one tap away.
+     */
     val appTheme: Preference<AppTheme> = preferenceStore.getEnum(
         "pref_app_theme",
-        if (DeviceUtil.isDynamicColorAvailable) {
-            AppTheme.MONET
-        } else {
-            AppTheme.DEFAULT
-        },
+        AppTheme.DEFAULT,
     )
 
     val themeDarkAmoled: Preference<Boolean> = preferenceStore.getBoolean("pref_theme_dark_amoled_key", false)

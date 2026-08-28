@@ -8,8 +8,10 @@ import android.graphics.RectF
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import yaku.translation.model.BoxF
 import yaku.translation.model.PageTranslation
 import yaku.translation.model.TextBlock
+import kotlin.math.sqrt
 
 /**
  * Draws a [PageTranslation] onto a copy of the page bitmap.
@@ -36,7 +38,7 @@ class TranslationRenderer(private val renderStyle: RenderStyle = RenderStyle()) 
 
         for (block in translation.blocks) {
             val text = block.translatedText ?: continue
-            drawBlock(canvas, block, text, boxPaint, borderPaint)
+            drawBlock(canvas, block, text, boxPaint, borderPaint, output.width, output.height)
         }
         return output
     }
@@ -47,8 +49,21 @@ class TranslationRenderer(private val renderStyle: RenderStyle = RenderStyle()) 
         text: String,
         boxPaint: Paint,
         borderPaint: Paint,
+        pageWidth: Int,
+        pageHeight: Int,
     ) {
-        val box = block.box
+        // Erase the source text over its own footprint. Keeping this rect exactly where the
+        // detector found the glyphs means that on a real page it lands inside the bubble -
+        // white on white - instead of stamping a patch across the artwork around it.
+        val source = block.box
+        canvas.drawRoundRect(
+            RectF(source.left, source.top, source.right, source.bottom),
+            renderStyle.cornerRadius,
+            renderStyle.cornerRadius,
+            boxPaint,
+        )
+
+        val box = horizontalBox(source, pageWidth.toFloat(), pageHeight.toFloat())
         val rect = RectF(box.left, box.top, box.right, box.bottom)
         canvas.drawRoundRect(rect, renderStyle.cornerRadius, renderStyle.cornerRadius, boxPaint)
         if (renderStyle.borderWidth > 0f) {
@@ -72,6 +87,35 @@ class TranslationRenderer(private val renderStyle: RenderStyle = RenderStyle()) 
         canvas.translate(box.left + renderStyle.padding, offsetY)
         layout.draw(canvas)
         canvas.restore()
+    }
+
+    /**
+     * Reshapes a vertical source box into one English can be set in.
+     *
+     * The detector reports where the *source* text is, and Japanese is usually set vertically:
+     * a nine-character line arrives as a column about 95px wide and 640px tall. Setting an
+     * English sentence in a measure that narrow breaks words mid-syllable and stacks them into
+     * a ragged ribbon - the text is present but unreadable, which is what "the overlay is wrong"
+     * looks like in practice. Reshaping to a horizontal plaque of the same area keeps the patch
+     * proportional to how much text there is, while giving the fitter a usable measure.
+     *
+     * Area is preserved rather than fixed, and growth is capped, so a tall thin column does not
+     * balloon into a banner across the artwork.
+     */
+    private fun horizontalBox(box: BoxF, pageWidth: Float, pageHeight: Float): BoxF {
+        if (!box.isVertical) return box
+
+        val width = sqrt(box.area * renderStyle.horizontalAspect)
+            .coerceAtMost(box.width * renderStyle.maxWidthGrowth)
+            .coerceAtMost(pageWidth)
+        val height = (box.area / width).coerceAtMost(box.height)
+
+        // Keep it centred on the text it replaces, then slide it back inside the page rather
+        // than clipping - a plaque half off the edge would cut the sentence in half.
+        val left = (box.centerX - width / 2f).coerceIn(0f, (pageWidth - width).coerceAtLeast(0f))
+        val top = (box.centerY - height / 2f).coerceIn(0f, (pageHeight - height).coerceAtLeast(0f))
+
+        return BoxF(left, top, left + width, top + height)
     }
 
     /**
@@ -127,6 +171,10 @@ data class RenderStyle(
     val padding: Float = 6f,
     val minTextSize: Float = 9f,
     val maxTextSize: Float = 64f,
+    /** Width-to-height ratio aimed for when re-setting a vertical column horizontally. */
+    val horizontalAspect: Float = 2.5f,
+    /** Ceiling on that widening, so a narrow column cannot become a banner across the page. */
+    val maxWidthGrowth: Float = 3f,
     val lineSpacingMultiplier: Float = 1.05f,
     val typeface: android.graphics.Typeface? = null,
 )

@@ -72,23 +72,44 @@ data class ModelFile(
  */
 @Serializable
 data class PackConfig(
+    /**
+     * Which generation of tuning the detector settings below belong to.
+     *
+     * A descriptor is written once at download time and read back verbatim forever, so without
+     * a marker there is no way to tell a pack that was built with deliberate settings from one
+     * carrying values that were simply the defaults of the day. Packs older than
+     * [TUNED_DETECTOR] have their detector trio replaced on load.
+     */
+    @SerialName("config_version") val configVersion: Int = 0,
+
     // -- detector
     @SerialName("detector_input_size") val detectorInputSize: Int = 960,
     @SerialName("detector_input_name") val detectorInputName: String = "input",
     @SerialName("detector_output_name") val detectorOutputName: String = "output",
-    @SerialName("detector_threshold") val detectorThreshold: Float = 0.3f,
-    @SerialName("detector_box_expand") val detectorBoxExpand: Float = 0.08f,
+    /**
+     * Deliberately low. Swept against a page with known text: at 0.3 the detector found
+     * 0-2 of 4 speech bubbles, at 0.15 it found all four. Manga lettering sits on white
+     * with thin strokes, and a DBNet trained on documents reports it far less confidently
+     * than it reports printed paragraphs.
+     */
+    @SerialName("detector_threshold") val detectorThreshold: Float = 0.15f,
+    /** 0.08 clipped the last characters off horizontal lines; 0.15 keeps them. */
+    @SerialName("detector_box_expand") val detectorBoxExpand: Float = 0.15f,
     @SerialName("detector_min_area_ratio") val detectorMinAreaRatio: Float = 0.00015f,
     /**
      * How far apart two boxes may sit and still be merged, as a multiple of the smaller box.
      *
      * Detectors emit one blob per glyph cluster, not per bubble, and Japanese is usually set
-     * vertically - so a line of dialogue arrives as a stack of separate boxes with a full
-     * character of leading between them. Anything below about 1.5 leaves them unmerged, which
-     * feeds the recogniser one glyph at a time: it produces plausible single words, costs one
-     * full inference pass each, and loses the context that makes the translation mean anything.
+     * vertically, so a line of dialogue arrives as a stack of separate boxes with a full
+     * character of leading between them. Feeding those to the recogniser one glyph at a time
+     * produces plausible single words, costs a full inference pass each, and loses the context
+     * that makes the translation mean anything.
+     *
+     * Because the slop scales with the *smaller* box, two 33px fragments of one column could
+     * only reach 66px apart while the real gap was 146px - so they never merged. 3.5 closes
+     * that without letting a caption swallow a neighbouring sound effect.
      */
-    @SerialName("detector_merge_slop") val detectorMergeSlop: Float = 2f,
+    @SerialName("detector_merge_slop") val detectorMergeSlop: Float = 3.5f,
     /** Boxes whose heights differ by more than this are never merged. */
     @SerialName("detector_merge_max_size_ratio") val detectorMergeMaxSizeRatio: Float = 3f,
     @SerialName("detector_mean") val detectorMean: List<Float> = listOf(0.485f, 0.456f, 0.406f),
@@ -114,4 +135,12 @@ data class PackConfig(
      * yields fluent nonsense rather than an obvious failure, so it is worth setting explicitly.
      */
     @SerialName("translator_decoder_start_token") val translatorDecoderStartToken: String? = null,
-)
+) {
+    companion object {
+        /**
+         * Generation that carries the swept detector settings. Raise this, and update the
+         * defaults above, to retune every installed pack on the next launch.
+         */
+        const val TUNED_DETECTOR = 1
+    }
+}

@@ -90,7 +90,10 @@ class OnnxTranslationEngine(
             val text = runCatching { recognizer.recognize(page, block.box) }
                 .onFailure { logcat(LogPriority.WARN, it) { "Recognition failed for a block" } }
                 .getOrDefault("")
-            block.copy(sourceText = text.takeIf { it.isNotBlank() })
+            // Requires an actual letter, not merely non-blank. A bubble outline reads as
+            // "(" often enough that it was being translated and drawn as a white box with a
+            // bracket in it - a full inference pass spent to deface the page.
+            block.copy(sourceText = text.takeIf { candidate -> candidate.any(Char::isLetter) })
         }.filter { it.sourceText != null }
 
         val translated = recognized.mapIndexed { index, block ->
@@ -98,7 +101,7 @@ class OnnxTranslationEngine(
             val text = runCatching { translator.translate(block.sourceText!!, source, target) }
                 .onFailure { logcat(LogPriority.WARN, it) { "Translation failed for a block" } }
                 .getOrDefault("")
-            block.copy(translatedText = text.takeIf { it.isNotBlank() })
+            block.copy(translatedText = tidy(text).takeIf { it.isNotBlank() })
         }
 
         PageTranslation(
@@ -111,6 +114,26 @@ class OnnxTranslationEngine(
         ).also { onProgress(TranslationProgress.Done(it)) }
     }
 
+    /**
+     * Removes the subtitle conventions the translator picked up from its training data.
+     *
+     * opus-MT was trained largely on film subtitles, so it prefixes lines with a dialogue dash
+     * and, when the source is a single short interjection, often emits the same sentence twice -
+     * a plain greeting came back as "- Good morning. - Good morning.". Both arrive as ordinary
+     * output tokens, indistinguishable from content until the sentence is read as a whole, so
+     * this is the first point that can tell them apart.
+     */
+    private fun tidy(text: String): String {
+        val sentences = text.split(SENTENCE_BREAK)
+            .map { it.trim().removePrefix("-").trim() }
+            .filter { it.isNotEmpty() }
+        if (sentences.isEmpty()) return text.trim()
+        // Collapse only when every sentence is the same one. Repetition for emphasis is rarer
+        // in dialogue than this failure is, but a translation of several distinct sentences
+        // has to survive intact.
+        return sentences.distinct().singleOrNull() ?: sentences.joinToString(" ")
+    }
+
     override fun close() {
         detector?.close()
         recognizer?.close()
@@ -121,6 +144,9 @@ class OnnxTranslationEngine(
     }
 
     companion object {
+        /** A sentence end, or the dash opus-MT uses to open a new speaker's line. */
+        private val SENTENCE_BREAK = Regex("""(?<=[.!?])\s+|\s+-\s+""")
+
         val DEFAULT_THREADS: Int get() = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 4)
     }
 }

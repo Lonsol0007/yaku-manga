@@ -64,6 +64,30 @@ class ModelRepository(
                 logcat(LogPriority.ERROR, it) { "Unreadable pack descriptor for $packId" }
             }
             .getOrNull()
+            ?.retuned()
+    }
+
+    /**
+     * Replaces detector settings that predate the current tuning.
+     *
+     * The trio below was measured against a page with known text: the values shipped with the
+     * first packs found none to two of its four speech bubbles and split those into single
+     * glyphs. Because descriptors are never rewritten, a pack downloaded then would keep those
+     * numbers forever - so the only way to deliver three corrected floats would be to make the
+     * user delete and re-download 277MB. A pack that sets [PackConfig.configVersion] is left
+     * exactly as its author built it.
+     */
+    private fun ModelPack.retuned(): ModelPack {
+        if (config.configVersion >= PackConfig.TUNED_DETECTOR) return this
+        val tuned = PackConfig()
+        return copy(
+            config = config.copy(
+                configVersion = PackConfig.TUNED_DETECTOR,
+                detectorThreshold = tuned.detectorThreshold,
+                detectorBoxExpand = tuned.detectorBoxExpand,
+                detectorMergeSlop = tuned.detectorMergeSlop,
+            ),
+        )
     }
 
     /** Every pack currently on disk. */

@@ -21,14 +21,22 @@ data class BoxF(
     /** True when this box is taller than it is wide, the usual shape of vertical Japanese text. */
     val isVertical: Boolean get() = height > width * 1.2f
 
+    /**
+     * Grows the box by [ratio] of its *shorter* side on all four edges.
+     *
+     * Scaling each axis by its own length pads a tall vertical column far more vertically than
+     * horizontally - 0.15 on a 95x640 column adds 14px of side margin but 96px top and bottom,
+     * which runs past the text and into the curved ends of the speech bubble. The renderer then
+     * paints over that, erasing part of the bubble outline. A single distance keeps the margin
+     * even and proportional to the lettering.
+     */
     fun expand(ratio: Float, maxWidth: Float, maxHeight: Float): BoxF {
-        val dx = width * ratio
-        val dy = height * ratio
+        val margin = minOf(width, height) * ratio
         return BoxF(
-            left = (left - dx).coerceAtLeast(0f),
-            top = (top - dy).coerceAtLeast(0f),
-            right = (right + dx).coerceAtMost(maxWidth),
-            bottom = (bottom + dy).coerceAtMost(maxHeight),
+            left = (left - margin).coerceAtLeast(0f),
+            top = (top - margin).coerceAtLeast(0f),
+            right = (right + margin).coerceAtMost(maxWidth),
+            bottom = (bottom + margin).coerceAtMost(maxHeight),
         )
     }
 

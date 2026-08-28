@@ -388,13 +388,34 @@ def load_sentencepiece_scores(model_dir: Path) -> dict[str, float]:
 
 
 def quantize(source: Path, target: Path) -> None:
-    """Dynamic int8 quantisation - roughly quarters size and latency on ARM."""
+    """
+    Dynamic int8 quantisation of MatMul only.
+
+    Quantising everything is the obvious call and produces a pack that cannot run. Applied to
+    convolutions, quantize_dynamic emits ConvInteger, and ONNX Runtime's Android package has no
+    CPU kernel for it - loading the model dies with
+
+        ORT_NOT_IMPLEMENTED: Could not find an implementation for ConvInteger(10)
+
+    The desktop onnxruntime wheel *does* implement it, so a pack built and verified here works
+    perfectly right up until it reaches a phone. Restricting to MatMul emits MatMulInteger,
+    which Android does implement.
+
+    Little is lost: the transformer encoders and decoders are almost entirely MatMul, which is
+    where the size comes from. The detector is a CNN and stays close to its float size, which is
+    a few megabytes either way.
+    """
     from onnxruntime.quantization import QuantType, quantize_dynamic
 
     quantize_dynamic(
         model_input=str(source),
         model_output=str(target),
         weight_type=QuantType.QInt8,
+        # Gather is the embedding lookup. For opus-MT that table is 60716 x 512 floats,
+        # about 124 MB, and leaving it alone doubles the pack. Quantising it emits an int8
+        # initialiser plus DequantizeLinear, both core operators Android implements -
+        # unlike ConvInteger, which is why Conv is still excluded.
+        op_types_to_quantize=["MatMul", "Gather"],
     )
     before = source.stat().st_size / 1e6
     after = target.stat().st_size / 1e6
@@ -412,6 +433,40 @@ EXPECTED_IO = {
     "translator_encoder.onnx": (["input_ids"], ["last_hidden_state"]),
     "translator_decoder.onnx": (["encoder_hidden_states"], ["logits"]),
 }
+
+
+# Operators the desktop onnxruntime implements but the Android package does not. A model using
+# one of these loads and runs perfectly here and dies on a phone with ORT_NOT_IMPLEMENTED, which
+# is why loading the graph locally is not sufficient proof that a pack works.
+ANDROID_UNSUPPORTED_OPS = {
+    "ConvInteger": "dynamic int8 quantisation of Conv layers; quantise MatMul only",
+    "QLinearConv": "static int8 quantisation of Conv layers; quantise MatMul only",
+}
+
+
+def check_android_ops(pack_dir: Path) -> bool:
+    """
+    Reject operators ONNX Runtime cannot execute on Android.
+
+    The verification below opens every graph with the *desktop* runtime, which has a larger
+    kernel set than the Android AAR. That check therefore passes on exactly the models that fail
+    on a device, so the op types have to be inspected directly.
+    """
+    import onnx
+
+    step("Checking for operators Android cannot run")
+    ok = True
+    for path in sorted(pack_dir.glob("*.onnx")):
+        model = onnx.load(str(path), load_external_data=False)
+        used = {node.op_type for node in model.graph.node}
+        bad = used & ANDROID_UNSUPPORTED_OPS.keys()
+        if bad:
+            ok = False
+            for op in sorted(bad):
+                log(f"FAIL {path.name}: uses {op} - {ANDROID_UNSUPPORTED_OPS[op]}")
+        else:
+            log(f"ok   {path.name}")
+    return ok
 
 
 def verify(pack_dir: Path) -> bool:
@@ -490,10 +545,17 @@ def write_metadata(pack_dir: Path, preset: Preset, base_url: str) -> dict:
         "detector_output_name": "output",
         "detector_mean": detector_mean,
         "detector_std": detector_std,
-        # Vertical Japanese arrives as one box per glyph with a full character of leading
-        # between them; anything below ~1.5 leaves the column unmerged. Measured with
-        # page_test.py, which reassembles 15 blobs into 4 bubbles at this value.
-        "detector_merge_slop": 2.0,
+        # Swept with tune_detector.py against a page whose four bubbles are known. At the
+        # library defaults (0.30 / 2.0 / 0.08) it recovered 0-2 of them and split those into
+        # single-glyph fragments; at these values it recovers all four as whole bubbles, and
+        # the page translates in 5.4s rather than 31s because there are fewer, better boxes.
+        # Merge slop scales with the smaller box, so it has to be generous: two 33px fragments
+        # of one vertical column sit 146px apart, which 2.0 could never bridge.
+        # Marks these as chosen, not inherited, so the app leaves them alone.
+        "config_version": 1,
+        "detector_threshold": 0.15,
+        "detector_merge_slop": 3.5,
+        "detector_box_expand": 0.15,
         "translator_uses_language_token": preset.translator_uses_language_token,
         "translator_decoder_start_token": preset.translator_decoder_start_token,
         **preset.extra_config,
@@ -593,6 +655,12 @@ def build(
     dump_translator_vocab(
         preset.translator_model, translator_dir, pack_dir / "translator_vocab.json", preset
     )
+
+    if not check_android_ops(pack_dir):
+        raise SystemExit(
+            "\nPack uses operators ONNX Runtime cannot execute on Android. "
+            "It would load here and fail on a phone."
+        )
 
     if not verify(pack_dir):
         raise SystemExit(

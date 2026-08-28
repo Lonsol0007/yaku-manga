@@ -36,7 +36,7 @@ FONT = r"C:\Windows\Fonts\YuGothM.ttc"
 PAGE = (1200, 1700)
 
 # Mirrors OnnxTextDetector.
-MERGE_SLOP = 2.0
+MERGE_SLOP = 3.5
 MERGE_MAX_SIZE_RATIO = 3.0
 
 BUBBLES = [
@@ -139,7 +139,9 @@ def detect(session, config: dict, page: Image.Image):
 
     boxes = []
     for left, top, right, bottom in merged:
-        dx, dy = (right - left) * expand, (bottom - top) * expand
+        # mirrors BoxF.expand: one distance, from the shorter side
+        margin = min(right - left, bottom - top) * expand
+        dx, dy = margin, margin
         boxes.append((
             max(0.0, (left - dx - pad_x) / scale),
             max(0.0, (top - dy - pad_y) / scale),
@@ -260,6 +262,13 @@ def main() -> None:
         t0 = time.time()
         ja = recognize(r_enc, r_dec, r_vocab, config, page, b)
         r_ms = (time.time() - t0) * 1000
+        # Mirrors OnnxTranslationEngine: a box has to yield a letter, not merely
+        # non-blank text, or a bubble outline read as "(" becomes a rendered overlay.
+        if not any(ch.isalpha() for ch in ja):
+            print(f"  [{i}] {tuple(int(v) for v in b)}")
+            print(f"      skipped, no letters: {ja!r}  ({r_ms:.0f} ms)")
+            rec_total += r_ms
+            continue
         t0 = time.time()
         en = translate(t_enc, t_dec, tok, config, ja)
         t_ms = (time.time() - t0) * 1000

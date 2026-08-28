@@ -25,21 +25,24 @@
           0.2749,
           0.287
         ],
-        "detector_merge_slop": 2.0,
+        "detector_merge_slop": 3.5,
         "translator_uses_language_token": false,
-        "translator_decoder_start_token": "<pad>"
+        "translator_decoder_start_token": "<pad>",
+        "detector_threshold": 0.15,
+        "detector_box_expand": 0.15,
+        "config_version": 1
       },
       "detector": {
         "name": "detector.onnx",
-        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/67b56797de77-detector.onnx",
-        "size_bytes": 4476296,
-        "sha256": "67b56797de776517feeb1649becfefc5e7b51b4a59f79a8815c0e9974d33f57a"
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/bcbf09058307-detector.onnx",
+        "size_bytes": 16501823,
+        "sha256": "bcbf0905830746b61fe2dabad9b0f5954c667496bbbd297498b63ad3803ee981"
       },
       "recognizer_encoder": {
         "name": "recognizer_encoder.onnx",
-        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/86d4a9b43b01-recognizer_encoder.onnx",
-        "size_bytes": 86967767,
-        "sha256": "86d4a9b43b0171d912ed009e411f583710a4d35a5c95f1453f1f0ad4aae2232e"
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/88a5dfe7e9fc-recognizer_encoder.onnx",
+        "size_bytes": 88735540,
+        "sha256": "88a5dfe7e9fc3cb504e31b57e9b1e9000e7808b5452508d2108817dd0d2c98e3"
       },
       "recognizer_decoder": {
         "name": "recognizer_decoder.onnx",
@@ -96,21 +99,24 @@
           0.2749,
           0.287
         ],
-        "detector_merge_slop": 2.0,
+        "detector_merge_slop": 3.5,
         "translator_uses_language_token": false,
-        "translator_decoder_start_token": "<pad>"
+        "translator_decoder_start_token": "<pad>",
+        "detector_threshold": 0.15,
+        "detector_box_expand": 0.15,
+        "config_version": 1
       },
       "detector": {
         "name": "detector.onnx",
-        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/611d327446fa-detector.onnx",
-        "size_bytes": 4476296,
-        "sha256": "611d327446fa682c746ad029078559d706f260f81c650850f81d8ddc6320e871"
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/bcbf09058307-detector.onnx",
+        "size_bytes": 16501823,
+        "sha256": "bcbf0905830746b61fe2dabad9b0f5954c667496bbbd297498b63ad3803ee981"
       },
       "recognizer_encoder": {
         "name": "recognizer_encoder.onnx",
-        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/86d4a9b43b01-recognizer_encoder.onnx",
-        "size_bytes": 86967767,
-        "sha256": "86d4a9b43b0171d912ed009e411f583710a4d35a5c95f1453f1f0ad4aae2232e"
+        "url": "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/88a5dfe7e9fc-recognizer_encoder.onnx",
+        "size_bytes": 88735540,
+        "sha256": "88a5dfe7e9fc3cb504e31b57e9b1e9000e7808b5452508d2108817dd0d2c98e3"
       },
       "recognizer_decoder": {
         "name": "recognizer_decoder.onnx",

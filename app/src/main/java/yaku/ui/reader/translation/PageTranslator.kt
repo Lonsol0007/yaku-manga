@@ -3,6 +3,7 @@ package yaku.ui.reader.translation
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Typeface
 import android.util.LruCache
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
@@ -18,6 +19,7 @@ import yaku.core.common.util.system.logcat
 import yaku.translation.engine.TranslationEngine
 import yaku.translation.engine.onnx.OnnxTranslationEngine
 import yaku.translation.model.TranslationProgress
+import yaku.translation.render.RenderStyle
 import yaku.translation.render.TranslationRenderer
 import yaku.translation.store.ModelRepository
 import java.io.ByteArrayOutputStream
@@ -43,7 +45,7 @@ class PageTranslator(
 
     val repository = ModelRepository(context, networkHelper.client, json)
 
-    private val renderer = TranslationRenderer()
+    private val renderer = TranslationRenderer(RenderStyle(typeface = letteringTypeface()))
     private val gate = Mutex()
 
     private var engine: TranslationEngine? = null
@@ -53,6 +55,19 @@ class PageTranslator(
     private val cache = object : LruCache<Int, ByteArray>(preferences.pageCacheSize.get().coerceIn(1, 16)) {
         override fun sizeOf(key: Int, value: ByteArray) = 1
     }
+
+    /**
+     * The face the translation is set in.
+     *
+     * Comics are lettered in an upright informal face, not the system sans a phone would
+     * otherwise supply - a page set in Roboto reads as a screenshot with subtitles rather than
+     * as a translated comic. Comic Neue ships in the APK under the SIL Open Font License; if it
+     * ever fails to load the renderer falls back to the platform face rather than losing the page.
+     */
+    private fun letteringTypeface(): Typeface? =
+        runCatching { Typeface.createFromAsset(context.assets, LETTERING_FONT) }
+            .onFailure { logcat(LogPriority.WARN, it) { "Could not load $LETTERING_FONT" } }
+            .getOrNull()
 
     fun isEnabled(): Boolean = preferences.enabled.get() && preferences.activePackId.get().isNotBlank()
 
@@ -173,5 +188,6 @@ class PageTranslator(
 
     private companion object {
         const val JPEG_QUALITY = 90
+        const val LETTERING_FONT = "fonts/ComicNeue-Bold.ttf"
     }
 }

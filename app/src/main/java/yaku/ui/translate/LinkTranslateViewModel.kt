@@ -86,6 +86,12 @@ class LinkTranslateViewModel(
     }
 
     private suspend fun runTranslation(url: String) {
+        // Drop the previous run's results before starting. resetOutputDir deletes the files
+        // those Page entries point at, so keeping them in state leaves the screen showing the
+        // last link's pages - backed by files that no longer exist - with this link's pages
+        // appended underneath. Pressing Clear did reset them; simply typing a new URL did not.
+        _state.update { it.copy(pages = emptyList(), error = null, savedCount = null) }
+
         // Off the main thread: deleting a directory of translated pages is disk work, and this
         // coroutine runs on Dispatchers.Main.immediate.
         withContext(Dispatchers.IO) { resetOutputDir() }

@@ -86,7 +86,7 @@ class LinkImageExtractor(private val client: OkHttpClient) {
      * - CSS `background-image: url(...)`
      * - inline scripts, where readers commonly embed the whole page list as a JSON array
      */
-    private fun extractFromHtml(document: Document): List<HttpUrl> {
+    internal fun extractFromHtml(document: Document): List<HttpUrl> {
         val base = document.baseUri()
         val found = LinkedHashSet<String>()
 
@@ -151,15 +151,28 @@ class LinkImageExtractor(private val client: OkHttpClient) {
      */
     private fun bestAttribute(element: Element): String? {
         val ranked = PREFERRED_ATTRIBUTES.firstNotNullOfOrNull { name ->
-            element.attr(name).takeIf { it.isNotBlank() && looksLikeImageUrl(it) }
+            firstCandidate(element.attr(name))?.takeIf { looksLikeImageUrl(it) }
         }
-        val value = ranked ?: element.attributes()
-            .map { it.value }
-            .firstOrNull { looksLikeImageUrl(it) }
+        if (ranked != null) return ranked
 
-        // srcset holds "url 1x, url 2x"; the first entry is enough.
-        return value?.substringBefore(',')?.trim()?.substringBefore(' ')
+        // An attribute nobody named is a guess, so it has to look like an image by its own path.
+        // The ranked names are known to carry images, which is what lets them accept the
+        // extensionless CDN paths many readers use; extending that trust to every attribute
+        // scrapes the "next chapter" link off the same element and then fetches it as a page.
+        return element.attributes()
+            .mapNotNull { firstCandidate(it.value) }
+            .firstOrNull { hasImageExtension(it) }
     }
+
+    /**
+     * The URL an attribute offers, with any srcset descriptor removed.
+     *
+     * srcset holds "url 1x, url 2x", so the value has to be cut down *before* it is judged.
+     * Testing the whole attribute asks whether a string ending in "2x" looks like an image,
+     * which throws away every responsive image whose URLs are relative.
+     */
+    private fun firstCandidate(value: String): String? =
+        value.substringBefore(',').trim().substringBefore(' ').takeIf { it.isNotBlank() }
 
     /**
      * Explain an empty result in terms of what the page contained.
@@ -265,7 +278,11 @@ class LinkImageExtractor(private val client: OkHttpClient) {
         private val PREFERRED_ATTRIBUTES = listOf(
             "data-src",
             "data-original",
+            "data-original-src",
+            "data-lazy",
             "data-lazy-src",
+            "data-echo",
+            "data-image",
             "data-full",
             "data-srcset",
             "srcset",
@@ -278,13 +295,30 @@ class LinkImageExtractor(private val client: OkHttpClient) {
         private val DECORATION_HINTS = listOf(
             "logo", "icon", "favicon", "avatar", "sprite", "banner",
             "advert", "/ads/", "placeholder", "spinner", "loading",
+            // A reader page usually carries the book's cover and a thumbnail of it, and when
+            // the pages themselves are drawn by JavaScript those are the only real images in
+            // the source. Without this the extractor returns them, and translating a cover
+            // looks like success - which is worse than reporting that no pages were found.
+            // A chapter's own title page can be called "cover" and would be skipped too; that
+            // is a page of artwork with little dialogue, so the trade is worth it.
+            "cover", "thumb",
+            // Content is never served out of a stylesheet asset directory. This catches
+            // promo graphics that carry no size the dimension filter can use - one such
+            // banner declares width="100%", which parses as no width at all.
+            "/css/",
         )
 
         private val BACKGROUND_URL = Regex("""url\(\s*['"]?([^'")]+)['"]?\s*\)""")
 
-        /** Quoted URLs ending in an image extension, including JSON-escaped slashes. */
+        /**
+         * Quoted URLs ending in an image extension, including JSON-escaped slashes.
+         *
+         * The leading slash is optionally escaped too. PHP's json_encode escapes forward
+         * slashes unless asked not to, so a page list from a PHP reader arrives with every
+         * path escaped - and matching only a bare slash misses the whole chapter.
+         */
         private val SCRIPT_URL = Regex(
-            """["'](?:https?:)?(?:\\?/\\?/|/)[^"'\s]{4,400}?\.(?:jpg|jpeg|png|webp|gif|avif)(?:\?[^"'\s]{0,200})?["']""",
+            """["'](?:https?:)?(?:\\?/\\?/|\\?/)[^"'\s]{4,400}?\.(?:jpg|jpeg|png|webp|gif|avif)(?:\?[^"'\s]{0,200})?["']""",
             RegexOption.IGNORE_CASE,
         )
 

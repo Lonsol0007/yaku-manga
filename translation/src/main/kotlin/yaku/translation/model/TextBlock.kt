@@ -18,6 +18,14 @@ data class BoxF(
     val centerX: Float get() = (left + right) / 2f
     val centerY: Float get() = (top + bottom) / 2f
 
+    /**
+     * The short side: roughly the size of the glyphs, whichever way the line runs.
+     *
+     * A vertical column is as wide as one character and as long as the sentence; a horizontal
+     * line is the other way round. The short side is the one that means the same thing in both.
+     */
+    val thickness: Float get() = minOf(width, height)
+
     /** True when this box is taller than it is wide, the usual shape of vertical Japanese text. */
     val isVertical: Boolean get() = height > width * 1.2f
 

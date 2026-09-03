@@ -250,6 +250,8 @@ private fun messageFor(error: Error): String = when (error) {
     Error.BadUrl -> stringResource(MR.strings.translate_link_error_bad_url)
     is Error.NoImages -> error.detail
     Error.AllFailed -> stringResource(MR.strings.translate_link_error_all_failed)
+    is Error.TooSmall ->
+        stringResource(MR.strings.translate_link_error_too_small, error.count)
     Error.TranslationOff -> stringResource(MR.strings.translate_link_error_disabled)
     is Error.UnsupportedType ->
         stringResource(MR.strings.translate_link_error_unsupported, error.contentType)

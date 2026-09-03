@@ -1,6 +1,7 @@
 package yaku.ui.translate
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -55,6 +56,20 @@ class LinkTranslateViewModel(
     /** Cleared on every new run so a long session cannot fill the cache directory. */
     private val outputDir = File(context.cacheDir, "link-translate")
 
+    /**
+     * Stamped into each page's file name so no two runs write the same path.
+     *
+     * Coil keys its memory cache on the file it was asked for, and since Coil 3 that key no
+     * longer carries the file's modification time. Writing every run to page_000.png therefore
+     * asks for a path it has already decoded, and it answers with the previous link's page -
+     * correctly, by its own rules. Clearing the list on screen does not help, because the stale
+     * bitmap comes back the moment the new file is requested under the old name.
+     */
+    private var runId = 0L
+
+    /** Images this run refused as thumbnails, used to explain an empty result. */
+    private var tooSmall = 0
+
     fun updateUrl(url: String) = _state.update { it.copy(url = url, error = null) }
 
     fun cancel() {
@@ -91,6 +106,8 @@ class LinkTranslateViewModel(
         // last link's pages - backed by files that no longer exist - with this link's pages
         // appended underneath. Pressing Clear did reset them; simply typing a new URL did not.
         _state.update { it.copy(pages = emptyList(), error = null, savedCount = null) }
+        runId = System.currentTimeMillis()
+        tooSmall = 0
 
         // Off the main thread: deleting a directory of translated pages is disk work, and this
         // coroutine runs on Dispatchers.Main.immediate.
@@ -137,7 +154,11 @@ class LinkTranslateViewModel(
         _state.update {
             it.copy(
                 stage = Stage.Idle,
-                error = if (it.pages.isEmpty()) Error.AllFailed else null,
+                error = when {
+                    it.pages.isNotEmpty() -> null
+                    tooSmall > 0 -> Error.TooSmall(tooSmall)
+                    else -> Error.AllFailed
+                },
             )
         }
     }
@@ -147,21 +168,33 @@ class LinkTranslateViewModel(
         index: Int,
         prefetched: ByteArray?,
         pageUrl: HttpUrl?,
-    ): Page = withContext(Dispatchers.IO) {
-        val bytes = if (prefetched != null) {
-            Buffer().write(prefetched).use { pageTranslator.translate(it).readByteArray() }
-        } else {
+    ): Page? = withContext(Dispatchers.IO) {
+        val raw = prefetched ?: run {
             // Present the page the image belongs to; hosts reject bare hotlinks with 403.
             val request = pageUrl
                 ?.let { GET(url.toString(), LinkImageExtractor.refererHeaders(it)) }
                 ?: GET(url.toString())
             client.newCall(request).await().use { response ->
                 check(response.isSuccessful) { "HTTP ${response.code}" }
-                response.body.source().use { pageTranslator.translate(it).readByteArray() }
+                response.body.bytes()
             }
         }
 
-        val file = File(outputDir, "page_%03d.png".format(index))
+        // Measure before translating. A thumbnail carries lettering a few pixels tall, and the
+        // recogniser does not decline to read it - it returns a fluent sentence assembled from
+        // noise, which is then set over the artwork in confident capitals. Refusing the image is
+        // the only honest answer, and it is far better than a page of invented dialogue.
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
+        if (bounds.outWidth in 1 until MIN_PAGE_WIDTH) {
+            logcat(LogPriority.INFO) { "Skipping ${bounds.outWidth}px image, too small to be a page" }
+            tooSmall++
+            return@withContext null
+        }
+
+        val bytes = Buffer().write(raw).use { pageTranslator.translate(it).readByteArray() }
+
+        val file = File(outputDir, "%d-page_%03d.png".format(runId, index))
         file.sink().buffer().use { it.write(bytes) }
         Page(source = url.toString(), file = file)
     }
@@ -249,9 +282,20 @@ class LinkTranslateViewModel(
         data object BadUrl : Error
         data class NoImages(val detail: String) : Error
         data object AllFailed : Error
+        data class TooSmall(val count: Int) : Error
         data object TranslationOff : Error
         data class UnsupportedType(val contentType: String) : Error
         data class Http(val code: Int) : Error
         data class Unreachable(val reason: String) : Error
+    }
+
+    private companion object {
+        /**
+         * Narrower than this and the image is a preview, not a page.
+         *
+         * Google's image thumbnails are around 300px across, and a page scan is several times
+         * that. The gap is wide enough that no real page falls in it.
+         */
+        const val MIN_PAGE_WIDTH = 400
     }
 }

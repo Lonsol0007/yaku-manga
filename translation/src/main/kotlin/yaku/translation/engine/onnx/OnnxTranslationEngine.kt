@@ -90,10 +90,13 @@ class OnnxTranslationEngine(
             val text = runCatching { recognizer.recognize(page, block.box) }
                 .onFailure { logcat(LogPriority.WARN, it) { "Recognition failed for a block" } }
                 .getOrDefault("")
-            // Requires an actual letter, not merely non-blank. A bubble outline reads as
-            // "(" often enough that it was being translated and drawn as a white box with a
-            // bracket in it - a full inference pass spent to deface the page.
-            block.copy(sourceText = text.takeIf { candidate -> candidate.any(Char::isLetter) })
+            // Two letters, not merely non-blank. A bubble outline reads as "(" often enough
+            // that it was being translated and drawn as a box with a bracket in it, and on a
+            // page of real artwork the detector returns single glyphs it has torn off a column
+            // - each one arrives as a plausible word and is set on the page as if it were a
+            // line of dialogue. A one-character line does exist, but it is rarer than the
+            // failure, so losing the odd interjection is the better trade.
+            block.copy(sourceText = text.takeIf { it.count(Char::isLetter) >= MIN_SOURCE_LETTERS })
         }.filter { it.sourceText != null }
 
         val translated = recognized.mapIndexed { index, block ->
@@ -101,7 +104,8 @@ class OnnxTranslationEngine(
             val text = runCatching { translator.translate(block.sourceText!!, source, target) }
                 .onFailure { logcat(LogPriority.WARN, it) { "Translation failed for a block" } }
                 .getOrDefault("")
-            block.copy(translatedText = tidy(text).takeIf { it.isNotBlank() })
+            val cleaned = tidy(text)
+            block.copy(translatedText = cleaned.takeIf { it.isNotBlank() && isProportionate(it, block.sourceText!!) })
         }
 
         PageTranslation(
@@ -113,6 +117,18 @@ class OnnxTranslationEngine(
             elapsedMillis = System.currentTimeMillis() - started,
         ).also { onProgress(TranslationProgress.Done(it)) }
     }
+
+    /**
+     * Rejects a translation far longer than its source could account for.
+     *
+     * A decoder that loses its way does not stop - it repeats until it hits the token limit,
+     * and returns a long, fluent, entirely invented passage. Measured on a scanned page, one
+     * box turned 63 characters of Japanese into 379 of English. Japanese to English roughly
+     * triples in length, so anything past five times the source plus a margin is the decoder
+     * talking to itself, and printing it over the artwork is worse than leaving the box alone.
+     */
+    private fun isProportionate(translated: String, source: String): Boolean =
+        translated.length <= source.length * MAX_LENGTH_RATIO + LENGTH_ALLOWANCE
 
     /**
      * Removes the subtitle conventions the translator picked up from its training data.
@@ -144,6 +160,13 @@ class OnnxTranslationEngine(
     }
 
     companion object {
+        /** Below this the "text" is a fragment the detector tore off, not a line of dialogue. */
+        private const val MIN_SOURCE_LETTERS = 2
+
+        /** Japanese to English roughly triples; five times over is a decoder that has looped. */
+        private const val MAX_LENGTH_RATIO = 5
+        private const val LENGTH_ALLOWANCE = 20
+
         /** A sentence end, or the dash opus-MT uses to open a new speaker's line. */
         private val SENTENCE_BREAK = Regex("""(?<=[.!?])\s+|\s+-\s+""")
 

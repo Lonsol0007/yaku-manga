@@ -1096,6 +1096,7 @@
     <string name="translate_link_error_bad_url">That does not look like a valid link</string>
     <string name="translate_link_error_no_images">No images found on that page</string>
     <string name="translate_link_error_all_failed">Could not translate any of the images</string>
+    <string name="translate_link_error_too_small">Those are thumbnails, not pages (%1$d of them, under 400px wide). Lettering that small cannot be read. Open the page itself and paste that link, or link straight to a full-size image.</string>
     <string name="translate_link_error_disabled">Turn on translation and install a model pack first</string>
     <string name="translate_link_error_unsupported">That link is %1$s, not an image or a web page</string>
     <string name="translate_link_error_http">The site returned HTTP %1$d</string>

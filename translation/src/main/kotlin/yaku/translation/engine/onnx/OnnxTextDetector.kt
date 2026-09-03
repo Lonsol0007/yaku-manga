@@ -33,12 +33,16 @@ class OnnxTextDetector(
             }
         }
 
-        val minArea = config.detectorMinAreaRatio * page.width * page.height
+        val pageArea = page.width.toFloat() * page.height
+        val minArea = config.detectorMinAreaRatio * pageArea
+        val maxArea = config.detectorMaxBoxAreaRatio * pageArea
         return boxes
             .map { letterboxed.unmap(it, page.width, page.height) }
             .map { it.expand(config.detectorBoxExpand, page.width.toFloat(), page.height.toFloat()) }
             .filter { it.area >= minArea && it.width > 4f && it.height > 4f }
-            .let(::mergeNeighbours)
+            .let { mergeNeighbours(it, maxArea) }
+            // A blob can be oversized on its own, without any merging to blame.
+            .filter { it.area <= maxArea }
             .sortedWith(readingOrder())
             .map { TextBlock(box = it, confidence = 1f) }
     }
@@ -111,7 +115,7 @@ class OnnxTextDetector(
      * translated out of order. Columns inside a bubble sit close together, so a small
      * proximity merge recovers the whole bubble.
      */
-    private fun mergeNeighbours(boxes: List<BoxF>): List<BoxF> {
+    private fun mergeNeighbours(boxes: List<BoxF>, maxArea: Float): List<BoxF> {
         if (boxes.size < 2) return boxes
         val working = boxes.toMutableList()
         var merged = true
@@ -121,14 +125,30 @@ class OnnxTextDetector(
                 for (j in i + 1 until working.size) {
                     val a = working[i]
                     val b = working[j]
-                    val slopX = minOf(a.width, b.width) * config.detectorMergeSlop
-                    val slopY = minOf(a.height, b.height) * config.detectorMergeSlop
-                    if (!a.intersects(b, slopX, slopY)) continue
-                    // Only merge similarly-shaped neighbours; a caption strip should not swallow
-                    // a nearby sound effect.
-                    val ratio = maxOf(a.height, b.height) / minOf(a.height, b.height).coerceAtLeast(1f)
+                    // Reach follows how thick the lettering is, not how long the line is.
+                    // Scaling by width gave a 200px-wide caption 700px of reach at slop 3.5 -
+                    // most of a panel - and a caption and a sound effect at opposite ends of
+                    // the same panel became one box, which read as the sound effect alone and
+                    // lost the caption entirely. A column of single glyphs, which is what the
+                    // generous slop exists for, is as thick as one character either way.
+                    val reach = minOf(a.thickness, b.thickness) * config.detectorMergeSlop
+                    if (!a.intersects(b, reach, reach)) continue
+                    // Only merge lettering of a similar size; a caption should not swallow a
+                    // nearby sound effect. Comparing heights asks the wrong question, because
+                    // the two ends of one vertical column differ in length by however much of
+                    // the sentence each holds - a nine-character column and the two characters
+                    // left over failed this test at a ratio of 3.3 and stayed apart, so the
+                    // page carried a stray "んだ" translated as its own sentence.
+                    val ratio = maxOf(a.thickness, b.thickness) /
+                        minOf(a.thickness, b.thickness).coerceAtLeast(1f)
                     if (ratio > config.detectorMergeMaxSizeRatio) continue
-                    working[i] = a.union(b)
+                    // Refuse the merge that would run away rather than dropping the result
+                    // afterwards; letting it happen first would swallow its neighbours on the
+                    // way and take their dialogue with it.
+                    val union = a.union(b)
+                    if (union.area > maxArea) continue
+
+                    working[i] = union
                     working.removeAt(j)
                     merged = true
                     break@outer

@@ -32,9 +32,18 @@ class LinkImageExtractor(private val client: OkHttpClient) {
      * NetworkOnMainThreadException, which kills the process rather than surfacing as an error.
      */
     suspend fun imagesFrom(rawUrl: String): Result = withContext(Dispatchers.IO) {
-        val url = rawUrl.trim().let {
+        val requested = rawUrl.trim().let {
             if (it.startsWith("http://") || it.startsWith("https://")) it else "https://$it"
         }.toHttpUrlOrNull() ?: return@withContext Result.BadUrl
+
+        // A Google image result names the full-size image it is previewing in its own query
+        // string, so the page is worth unwrapping rather than reading. Scraping it instead
+        // collects the thumbnail grid around the result - a 1336x1920 page arrives as a 300px
+        // preview, and the recogniser, handed lettering a few pixels tall, does not fail but
+        // invents a fluent sentence out of noise.
+        val url = IMAGE_QUERY_KEYS.firstNotNullOfOrNull { key ->
+            requested.queryParameter(key)?.trim()?.toHttpUrlOrNull()
+        } ?: requested
 
         val response = try {
             client.newCall(GET(url.toString())).await()
@@ -215,8 +224,12 @@ class LinkImageExtractor(private val client: OkHttpClient) {
      * costs a full detect-recognise-translate pass to produce nothing.
      */
     private fun looksLikeDecoration(url: HttpUrl): Boolean {
-        val path = url.encodedPath.lowercase()
-        return DECORATION_HINTS.any { path.contains(it) }
+        // Host and query as well as path. A Google Images result is served from
+        // encrypted-tbn0.gstatic.com as /images?q=tbn:..., where every clue that it is a
+        // thumbnail sits outside the path - so pasting a search results page returned a
+        // screenful of 300px previews and the reader tried to translate them.
+        val haystack = (url.host + url.encodedPath + '?' + (url.encodedQuery ?: "")).lowercase()
+        return DECORATION_HINTS.any { haystack.contains(it) }
     }
 
     private fun looksLikeImageUrl(value: String): Boolean =
@@ -289,6 +302,14 @@ class LinkImageExtractor(private val client: OkHttpClient) {
             "src",
         )
 
+        /**
+         * Query parameters that carry the real image on a viewer or redirect page.
+         *
+         * `imgurl` is Google's; `mediaurl` is Bing's. Both pages are otherwise a grid of
+         * thumbnails, so following the link is worse than reading the parameter.
+         */
+        private val IMAGE_QUERY_KEYS = listOf("imgurl", "mediaurl")
+
         private val IMAGE_EXTENSIONS =
             listOf(".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif", ".jfif")
 
@@ -306,6 +327,8 @@ class LinkImageExtractor(private val client: OkHttpClient) {
             // promo graphics that carry no size the dimension filter can use - one such
             // banner declares width="100%", which parses as no width at all.
             "/css/",
+            // Google's thumbnail CDN, which is what a search results page is made of.
+            "tbn",
         )
 
         private val BACKGROUND_URL = Regex("""url\(\s*['"]?([^'")]+)['"]?\s*\)""")

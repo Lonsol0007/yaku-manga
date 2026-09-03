@@ -97,6 +97,15 @@ data class PackConfig(
     @SerialName("detector_box_expand") val detectorBoxExpand: Float = 0.15f,
     @SerialName("detector_min_area_ratio") val detectorMinAreaRatio: Float = 0.00015f,
     /**
+     * Largest share of the page one text box may occupy.
+     *
+     * A page of real artwork produces hundreds of blobs, and merging can chain across all of
+     * them: measured on a scanned page, one box came back as the whole 1336x1920 sheet and was
+     * duly given a sentence of its own, painted over everything. No line of dialogue is a
+     * seventh of a page, so a box that large is a runaway rather than text.
+     */
+    @SerialName("detector_max_box_area_ratio") val detectorMaxBoxAreaRatio: Float = 0.12f,
+    /**
      * How far apart two boxes may sit and still be merged, as a multiple of the smaller box.
      *
      * Detectors emit one blob per glyph cluster, not per bubble, and Japanese is usually set

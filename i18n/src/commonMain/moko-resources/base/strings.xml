@@ -1095,6 +1095,9 @@
     <string name="translate_link_translating">Translating</string>
     <string name="translate_link_error_bad_url">That does not look like a valid link</string>
     <string name="translate_link_error_no_images">No images found on that page</string>
+    <string name="action_translate_page">Translate</string>
+    <string name="pref_translation_link_tab">Translate from a link (experimental)</string>
+    <string name="pref_translation_link_tab_summary">Adds a tab for pasting the address of a page or an image. It has to work out which pictures on a page are manga, so how well it does depends on the site.</string>
     <string name="translate_link_error_all_failed">Could not translate any of the images</string>
     <string name="translate_link_error_too_small">Those are thumbnails, not pages (%1$d of them, under 400px wide). Lettering that small cannot be read. Open the page itself and paste that link, or link straight to a full-size image.</string>
     <string name="translate_link_error_disabled">Turn on translation and install a model pack first</string>

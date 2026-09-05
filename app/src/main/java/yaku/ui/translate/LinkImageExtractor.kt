@@ -224,12 +224,18 @@ class LinkImageExtractor(private val client: OkHttpClient) {
      * costs a full detect-recognise-translate pass to produce nothing.
      */
     private fun looksLikeDecoration(url: HttpUrl): Boolean {
-        // Host and query as well as path. A Google Images result is served from
-        // encrypted-tbn0.gstatic.com as /images?q=tbn:..., where every clue that it is a
-        // thumbnail sits outside the path - so pasting a search results page returned a
-        // screenful of 300px previews and the reader tried to translate them.
-        val haystack = (url.host + url.encodedPath + '?' + (url.encodedQuery ?: "")).lowercase()
-        return DECORATION_HINTS.any { haystack.contains(it) }
+        // The file name only. A host and a query say how a picture is delivered, not what it
+        // is: "fit=cover" is how an image CDN is told to crop, "loading=lazy" is how a tag is
+        // told to wait. Searching those for the same words that spot a logo threw away every
+        // page of any site that serves its images through such a CDN - the reader refused real
+        // manga sites while a link to a search result still worked.
+        val path = url.encodedPath.lowercase()
+        if (DECORATION_HINTS.any { path.contains(it) }) return true
+
+        // One exception, named rather than guessed at. Google's thumbnail CDN serves previews
+        // from /images and keeps the only clue in the query, so a search results page would
+        // otherwise arrive as a screenful of 300px images.
+        return url.host.endsWith("gstatic.com") && path.startsWith("/images")
     }
 
     private fun looksLikeImageUrl(value: String): Boolean =
@@ -327,8 +333,6 @@ class LinkImageExtractor(private val client: OkHttpClient) {
             // promo graphics that carry no size the dimension filter can use - one such
             // banner declares width="100%", which parses as no width at all.
             "/css/",
-            // Google's thumbnail CDN, which is what a search results page is made of.
-            "tbn",
         )
 
         private val BACKGROUND_URL = Regex("""url\(\s*['"]?([^'")]+)['"]?\s*\)""")

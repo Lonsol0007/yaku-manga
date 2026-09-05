@@ -16,6 +16,16 @@ class TranslationPreferences(
     /** Master switch. Off by default - translation costs battery and the models are not present. */
     val enabled: Preference<Boolean> = preferenceStore.getBoolean("pref_translation_enabled", false)
 
+    /**
+     * Shows the tab that translates a pasted link. Off by default.
+     *
+     * It depends on guessing which images on an arbitrary page are manga, which works on some
+     * sites and returns a gallery of thumbnails on others. That is a reasonable thing to
+     * experiment with and a poor thing to meet without warning in the navigation bar.
+     */
+    val linkTranslateEnabled: Preference<Boolean> =
+        preferenceStore.getBoolean("pref_translation_link_tab_enabled", false)
+
     val sourceLanguage: Preference<String> = preferenceStore.getString(
         "pref_translation_source_language",
         TranslationLanguage.JAPANESE.code,

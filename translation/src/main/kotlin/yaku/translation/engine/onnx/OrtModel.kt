@@ -79,6 +79,16 @@ class OrtModel private constructor(
             val options = OrtSession.SessionOptions().apply {
                 setIntraOpNumThreads(threads.coerceAtLeast(1))
                 setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+
+                // The CPU arena keeps every block it has ever allocated, so a run of pages
+                // never gives memory back: measured across one chapter the native heap went
+                // from 141MB two minutes in to 593MB at four, and the process was killed at
+                // six while still in the foreground. Pages differ in size, so the arena cannot
+                // reuse much of what it holds anyway, and the memory pattern planner has
+                // little to plan for. Both cost some allocation speed per page and keep the
+                // footprint flat, which is what lets a chapter finish at all.
+                setCPUArenaAllocator(false)
+                setMemoryPatternOptimization(false)
             }
             return OrtModel(env, env.createSession(file.absolutePath, options))
         }

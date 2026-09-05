@@ -81,6 +81,11 @@ object SettingsTranslationScreen : SearchableSettings {
                 subtitle = stringResource(MR.strings.pref_translation_enabled_summary),
                 enabled = installed.isNotEmpty(),
             ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.linkTranslateEnabled,
+                title = stringResource(MR.strings.pref_translation_link_tab),
+                subtitle = stringResource(MR.strings.pref_translation_link_tab_summary),
+            ),
             Preference.PreferenceGroup(
                 title = stringResource(MR.strings.pref_translation_languages),
                 preferenceItems = listOf(

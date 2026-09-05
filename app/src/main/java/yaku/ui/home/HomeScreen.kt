@@ -23,6 +23,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -83,6 +84,17 @@ object HomeScreen : Screen() {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val context = LocalContext.current
+
+        // Link translation is experimental, so its tab is only in the bar once it is asked for.
+        val prefs = remember { context.appGraph.translationPreferences }
+        val showLinkTranslate by produceState(initialValue = prefs.linkTranslateEnabled.get()) {
+            prefs.linkTranslateEnabled.changes().collectLatest { value = it }
+        }
+        val tabs = remember(showLinkTranslate) {
+            if (showLinkTranslate) TABS else TABS.filterNot { it == LinkTranslateTab }
+        }
+
         TabNavigator(
             tab = LibraryTab,
             key = TabNavigatorKey,
@@ -93,7 +105,7 @@ object HomeScreen : Screen() {
                     startBar = {
                         if (isTabletUi()) {
                             NavigationRail {
-                                TABS.fastForEach {
+                                tabs.fastForEach {
                                     NavigationRailItem(it)
                                 }
                             }
@@ -110,7 +122,7 @@ object HomeScreen : Screen() {
                                 exit = shrinkVertically(),
                             ) {
                                 YakuTaskbar {
-                                    TABS.fastForEach {
+                                    tabs.fastForEach {
                                         TaskbarItem(it)
                                     }
                                 }

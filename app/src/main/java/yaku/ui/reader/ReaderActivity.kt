@@ -333,6 +333,8 @@ class ReaderActivity : BaseActivity() {
                     onSetAsCover = viewModel::setAsCover,
                     onShare = viewModel::shareImage,
                     onSave = viewModel::saveImage,
+                    canTranslate = viewModel.canTranslate,
+                    onTranslate = viewModel::translatePage,
                 )
             }
             null -> {}

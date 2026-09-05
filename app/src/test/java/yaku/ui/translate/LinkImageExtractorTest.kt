@@ -70,6 +70,33 @@ class LinkImageExtractorTest {
     }
 
     @Test
+    fun `keeps a page whose cdn query asks for a cover crop`() {
+        // "fit=cover" describes how to resize a picture, not what the picture is. Image CDNs
+        // put it on everything, so matching the word anywhere in the URL threw away the pages
+        // of any site that serves them through one.
+        val url = "https://cdn.example.com/manga/ch101/001.jpg?w=800&fit=cover"
+        extract("""<img src="$url">""").shouldContainExactly(url)
+    }
+
+    @Test
+    fun `keeps a page whose tag asks for lazy loading`() {
+        val url = "https://cdn.example.com/manga/ch101/002.jpg?loading=lazy"
+        extract("""<img src="$url">""").shouldContainExactly(url)
+    }
+
+    @Test
+    fun `keeps a page served from a host that happens to contain a hint word`() {
+        val url = "https://covers-cdn.example.com/manga/ch101/003.jpg"
+        extract("""<img src="$url">""").shouldContainExactly(url)
+    }
+
+    @Test
+    fun `still drops a google image thumbnail`() {
+        extract("""<img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQCrN0">""")
+            .shouldBeEmpty()
+    }
+
+    @Test
     fun `drops site furniture by name`() {
         extract(
             """

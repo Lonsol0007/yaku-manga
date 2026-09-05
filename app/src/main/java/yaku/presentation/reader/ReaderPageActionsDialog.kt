@@ -8,6 +8,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Photo
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,6 +32,8 @@ fun ReaderPageActionsDialog(
     onSetAsCover: () -> Unit,
     onShare: (Boolean) -> Unit,
     onSave: () -> Unit,
+    canTranslate: Boolean,
+    onTranslate: () -> Unit,
 ) {
     var showSetCoverDialog by remember { mutableStateOf(false) }
 
@@ -72,6 +75,19 @@ fun ReaderPageActionsDialog(
                     onDismissRequest()
                 },
             )
+            // Only when a pack is installed and the feature is on; otherwise the button would
+            // dismiss the sheet and leave the page exactly as it was.
+            if (canTranslate) {
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    title = stringResource(MR.strings.action_translate_page),
+                    icon = Icons.Outlined.Translate,
+                    onClick = {
+                        onTranslate()
+                        onDismissRequest()
+                    },
+                )
+            }
         }
     }
 

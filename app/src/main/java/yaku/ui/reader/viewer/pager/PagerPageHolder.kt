@@ -97,6 +97,10 @@ class PagerPageHolder(
             launchIO {
                 loader.loadPage(page)
             }
+            launch {
+                // Requested once and never withdrawn, so this re-renders the page at most once.
+                page.translationRequested.collectLatest { if (it) setImage() }
+            }
             page.statusFlow.collectLatest { state ->
                 when (state) {
                     Page.State.Queue -> setQueued()
@@ -187,8 +191,13 @@ class PagerPageHolder(
 
     private suspend fun process(page: ReaderPage, imageSource: BufferedSource): BufferedSource {
         // Translation runs before any splitting or rotation so the models always see a whole,
-        // upright page - a half page cuts speech bubbles down the middle.
-        val translated = viewer.graph.pageTranslator.translate(imageSource)
+        // upright page - a half page cuts speech bubbles down the middle. It only runs when
+        // this page has been asked for: it is far too slow to sit in the load of every page.
+        val translated = if (page.translationRequested.value) {
+            viewer.graph.pageTranslator.translate(imageSource)
+        } else {
+            imageSource
+        }
 
         if (viewer.config.dualPageRotateToFit) {
             return rotateDualPage(translated)

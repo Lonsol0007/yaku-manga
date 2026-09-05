@@ -88,6 +88,7 @@ import yaku.ui.reader.model.ViewerChapters
 import yaku.ui.reader.setting.ReaderOrientation
 import yaku.ui.reader.setting.ReaderPreferences
 import yaku.ui.reader.setting.ReadingMode
+import yaku.ui.reader.translation.TranslationPreferences
 import yaku.ui.reader.viewer.Viewer
 import java.util.Date
 import kotlin.getValue
@@ -122,6 +123,7 @@ class ReaderViewModel(
     private val coverCache: CoverCache,
     private val chapterCache: ChapterCache,
     private val downloadCache: DownloadCache,
+    private val translationPreferences: TranslationPreferences,
 ) : ViewModel() {
 
     @AssistedFactory
@@ -896,6 +898,24 @@ class ReaderViewModel(
         } catch (e: Throwable) {
             logcat(LogPriority.ERROR, e)
         }
+    }
+
+    /**
+     * Whether asking for a translation could do anything.
+     *
+     * Offering the action with the feature switched off, or with no pack chosen, produces a
+     * button that appears to work and changes nothing - which is indistinguishable from the
+     * translation having failed.
+     */
+    val canTranslate: Boolean
+        get() = translationPreferences.enabled.get() &&
+            translationPreferences.activePackId.get().isNotBlank()
+
+    /** Ask for the page in the open dialog to be translated. The holder re-renders it. */
+    fun translatePage() {
+        val page = (state.value.dialog as? Dialog.PageActions)?.page ?: return
+        if (page.status != Page.State.Ready) return
+        page.translationRequested.value = true
     }
 
     /**

@@ -1,6 +1,8 @@
 package yaku.ui.reader.translation
 
+import android.content.ComponentCallbacks2
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Typeface
@@ -9,6 +11,10 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.network.NetworkHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -47,6 +53,37 @@ class PageTranslator(
 
     private val renderer = TranslationRenderer(RenderStyle(typeface = letteringTypeface()))
     private val gate = Mutex()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    init {
+        // Android asks for memory back before it starts killing processes, and this object
+        // holds by far the most of it: measured on a device, the loaded models are about
+        // 800MB of native heap and stay resident long after the last page was translated.
+        // That is what got the app killed part way through a chapter while it was still the
+        // foreground app. Reloading them costs a few seconds; being killed costs the run.
+        context.registerComponentCallbacks(
+            object : ComponentCallbacks2 {
+                override fun onTrimMemory(level: Int) {
+                    if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) releaseModels()
+                }
+
+                override fun onLowMemory() = releaseModels()
+
+                override fun onConfigurationChanged(newConfig: Configuration) = Unit
+            },
+        )
+    }
+
+    /**
+     * Drops the models without waiting for the caller.
+     *
+     * [release] takes [gate], so a page being translated right now finishes first rather than
+     * having the session freed underneath it.
+     */
+    private fun releaseModels() {
+        scope.launch { release() }
+    }
 
     private var engine: TranslationEngine? = null
     private var engineFor: String? = null

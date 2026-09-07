@@ -43,6 +43,16 @@ class OrtModel private constructor(
         OnnxTensor.createTensor(env, LongBuffer.wrap(data), shape)
 
     /**
+     * Runs the session and hands every output to [block].
+     *
+     * The float path below carries one tensor, which suits a detector whose whole answer is a
+     * probability map. One that returns boxes has three - labels, boxes and scores - and the
+     * labels are integers, so they cannot come back through a FloatArray at all.
+     */
+    fun <T> run(inputs: Map<String, OnnxTensor>, block: (OrtSession.Result) -> T): T =
+        session.run(inputs).use(block)
+
+    /**
      * Runs the session and hands the named output to [block] as a flat float array plus its shape.
      *
      * The result is copied out before the native buffers are released, so [block] may keep it.

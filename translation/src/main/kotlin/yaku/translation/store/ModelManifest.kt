@@ -83,6 +83,18 @@ data class PackConfig(
     @SerialName("config_version") val configVersion: Int = 0,
 
     // -- detector
+    /**
+     * Which sort of detector the pack ships.
+     *
+     * `dbnet` returns a probability map that has to be thresholded and grouped into boxes, and
+     * knows nothing about balloons. `comic` returns boxes and speech balloons directly, which
+     * removes the grouping heuristics and the guesswork about where a balloon is.
+     */
+    @SerialName("detector_kind") val detectorKind: String = "dbnet",
+
+    /** Detections below this score are dropped. Only used by a `comic` detector. */
+    @SerialName("detector_min_confidence") val detectorMinConfidence: Float = 0.5f,
+
     @SerialName("detector_input_size") val detectorInputSize: Int = 960,
     @SerialName("detector_input_name") val detectorInputName: String = "input",
     @SerialName("detector_output_name") val detectorOutputName: String = "output",

@@ -1,6 +1,7 @@
 package yaku.translation.engine.onnx
 
 import android.graphics.Bitmap
+import yaku.translation.engine.TextDetector
 import yaku.translation.model.BoxF
 import yaku.translation.model.TextBlock
 import yaku.translation.store.PackConfig
@@ -18,9 +19,9 @@ import java.util.ArrayDeque
 class OnnxTextDetector(
     private val model: OrtModel,
     private val config: PackConfig,
-) : Closeable {
+) : TextDetector {
 
-    fun detect(page: Bitmap): List<TextBlock> {
+    override fun detect(page: Bitmap): List<TextBlock> {
         val size = config.detectorInputSize
         val letterboxed = ImageTensors.letterbox(page, size, config.detectorMean, config.detectorStd)
 

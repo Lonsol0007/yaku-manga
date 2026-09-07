@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import yaku.core.common.util.system.logcat
+import yaku.translation.engine.TextDetector
 import yaku.translation.engine.TranslationEngine
 import yaku.translation.engine.onnx.tokenizer.SentencePieceVocab
 import yaku.translation.engine.onnx.tokenizer.UnigramTokenizer
@@ -35,7 +36,7 @@ class OnnxTranslationEngine(
 
     private val loadLock = Mutex()
 
-    private var detector: OnnxTextDetector? = null
+    private var detector: TextDetector? = null
     private var recognizer: OnnxTextRecognizer? = null
     private var translator: OnnxTranslator? = null
 
@@ -50,10 +51,15 @@ class OnnxTranslationEngine(
     private fun loadIfNeeded() {
         if (detector != null && recognizer != null && translator != null) return
 
-        detector = OnnxTextDetector(
-            model = OrtModel.open(file(pack.detector.name), threads),
-            config = pack.config,
-        )
+        // Both kinds answer the same question and nothing downstream can tell them apart,
+        // but they arrive at it so differently that they cannot share an implementation: one
+        // thresholds a map and groups blobs, the other reads boxes the model already drew.
+        val detectorModel = OrtModel.open(file(pack.detector.name), threads)
+        detector = if (pack.config.detectorKind == COMIC_DETECTOR) {
+            OnnxComicDetector(detectorModel, pack.config)
+        } else {
+            OnnxTextDetector(detectorModel, pack.config)
+        }
         recognizer = OnnxTextRecognizer(
             encoder = OrtModel.open(file(pack.recognizerEncoder.name), threads),
             decoder = OrtModel.open(file(pack.recognizerDecoder.name), threads),
@@ -160,6 +166,9 @@ class OnnxTranslationEngine(
     }
 
     companion object {
+        /** [PackConfig.detectorKind] of a detector that returns boxes and balloons. */
+        private const val COMIC_DETECTOR = "comic"
+
         /** Below this the "text" is a fragment the detector tore off, not a line of dialogue. */
         private const val MIN_SOURCE_LETTERS = 2
 

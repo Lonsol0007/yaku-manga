@@ -72,6 +72,14 @@ data class TextBlock(
     val confidence: Float,
     val sourceText: String? = null,
     val translatedText: String? = null,
+    /**
+     * The speech balloon this text sits in, when the detector could say.
+     *
+     * This is where the translation belongs, and it is not something that can be worked out
+     * from the text's own box: the box says where the lettering is, and the balloon extends
+     * well past it in every direction. A detector trained on comics reports both.
+     */
+    val bubble: BoxF? = null,
 ) {
     val isTranslated: Boolean get() = !translatedText.isNullOrBlank()
 }

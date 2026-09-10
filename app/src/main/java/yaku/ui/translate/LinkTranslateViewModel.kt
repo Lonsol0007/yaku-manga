@@ -43,6 +43,7 @@ class LinkTranslateViewModel(
     networkHelper: NetworkHelper,
     private val pageTranslator: PageTranslator,
     private val imageSaver: ImageSaver,
+    private val publisher: TranslatedChapterPublisher,
 ) : ViewModel() {
 
     private val client = networkHelper.client
@@ -151,9 +152,21 @@ class LinkTranslateViewModel(
             }
         }
 
+        val translated = _state.value.pages
+        // Filed before the stage goes idle, so the screen never shows a finished run with no
+        // reader to open - the pages are either readable or the failure is on screen.
+        val target = if (translated.isEmpty()) {
+            null
+        } else {
+            runCatching { publisher.publish(url, translated.map { it.file }) }
+                .onFailure { logcat(LogPriority.ERROR, it) { "Could not file the translated chapter" } }
+                .getOrNull()
+        }
+
         _state.update {
             it.copy(
                 stage = Stage.Idle,
+                readerTarget = target,
                 error = when {
                     it.pages.isNotEmpty() -> null
                     tooSmall > 0 -> Error.TooSmall(tooSmall)
@@ -161,6 +174,11 @@ class LinkTranslateViewModel(
                 },
             )
         }
+    }
+
+    /** Called once the reader has been launched, so returning here does not launch it again. */
+    fun readerOpened() {
+        _state.update { it.copy(readerTarget = null) }
     }
 
     private suspend fun translateOne(
@@ -263,6 +281,8 @@ class LinkTranslateViewModel(
         val error: Error? = null,
         /** Pages written to the gallery by the last save, or null if none has run. */
         val savedCount: Int? = null,
+        /** Set when a finished translation is ready to be opened in the reader. */
+        val readerTarget: TranslatedChapterPublisher.Target? = null,
     ) {
         val isWorking: Boolean get() = stage != Stage.Idle
     }

@@ -25,6 +25,12 @@ Settings holds a *list* of manifest URLs, not one. The official source is pre-fi
 removed like any other; adding your own does not displace it. Nothing is fetched until the pack
 browser is opened, so a user who sideloads packs never makes a request at all.
 
+The official packs are split across manifests by the app version they need. `packs-v1` holds
+packs every version can run; `packs-v2` holds packs that need a newer app, such as a `comic`
+detector. A version reads only the manifests it can use, and that is the one way to keep a pack
+from an older app: older versions skip config keys they do not recognise, so a pack listed where
+they look is offered to them and then fails on every page.
+
 If a source is unreachable its failure is shown next to the packs the other sources returned,
 rather than replacing them - a typo in a URL should not look the same as a source with nothing
 to offer.
@@ -93,11 +99,13 @@ on), so most stock exports from Optimum need no configuration at all.
 
 | Key | Default | Meaning |
 |---|---|---|
+| `detector_kind` | `"dbnet"` | `dbnet`: one probability-map output, thresholded and grouped into boxes; the keys below apply. `comic`: inputs `images` and `orig_target_sizes`, outputs `labels`, `boxes` and `scores`, with speech balloons as a class of their own. |
+| `detector_min_confidence` | `0.5` | `comic` only. Detections scoring below this are dropped. |
 | `detector_input_size` | `960` | Square side the page is letterboxed into. |
 | `detector_input_name` | `"input"` | Detector input tensor. |
 | `detector_output_name` | `"output"` | Probability-map output tensor. |
-| `detector_threshold` | `0.3` | Binarisation threshold on the probability map. |
-| `detector_box_expand` | `0.08` | Fraction each box grows by, the DB "unclip" step. |
+| `detector_threshold` | `0.15` | Binarisation threshold on the probability map. |
+| `detector_box_expand` | `0.15` | Fraction each box grows by, the DB "unclip" step. |
 | `detector_min_area_ratio` | `0.00015` | Boxes smaller than this fraction of the page are dropped. |
 | `detector_mean` / `detector_std` | ImageNet | Per-channel normalisation. |
 | `recognizer_input_size` | `224` | Square side each text crop is resized to. |

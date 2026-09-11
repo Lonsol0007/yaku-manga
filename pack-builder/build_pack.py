@@ -17,7 +17,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,6 +29,27 @@ from pathlib import Path
 # --------------------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class HubFile:
+    """A file taken from HuggingFace as published, pinned so every build fetches the same bytes."""
+
+    repo_id: str
+    filename: str
+    revision: str
+    sha256: str
+
+
+# RT-DETR-v2 trained on comics, Apache-2.0. It returns speech balloons as well as the text in
+# them, which the DBNet detector cannot, and the balloon is where a translation has to be set.
+# Used exactly as published, so a pack's detector can be checked against this hash.
+COMIC_DETECTOR = HubFile(
+    repo_id="ogkalu/comic-text-and-bubble-detector",
+    filename="detector.onnx",
+    revision="16e8a622f91fabc6b5b65c96d32d1183f8843546",
+    sha256="065744e91c0594ad8663aa8b870ce3fb27222942eded5a3cc388ce23421bd195",
+)
+
+
 @dataclass
 class Preset:
     pack_id: str
@@ -34,6 +57,8 @@ class Preset:
     description: str
     source_languages: list[str]
     target_languages: list[str]
+    # For a DBNet detector, the doctr architecture and the side it is exported at. For any
+    # other kind, labels only.
     detector_arch: str
     detector_size: int
     recognizer_model: str
@@ -41,6 +66,8 @@ class Preset:
     translator_uses_language_token: bool
     translator_decoder_start_token: str
     extra_config: dict = field(default_factory=dict)
+    # "dbnet" is exported from doctr. "comic" is COMIC_DETECTOR, fetched rather than exported.
+    detector_kind: str = "dbnet"
 
 
 PRESETS: dict[str, Preset] = {
@@ -58,6 +85,23 @@ PRESETS: dict[str, Preset] = {
         translator_model="Helsinki-NLP/opus-mt-ja-en",
         translator_uses_language_token=False,
         translator_decoder_start_token="<pad>",
+    ),
+    # ja-en with a detector trained on comics. It finds the balloons as well as the text, which
+    # is what lets the renderer set a translation inside one. About 150 MB larger than ja-en:
+    # the detector is used as published, in fp32, rather than exported and quantised.
+    "ja-en-comic": Preset(
+        pack_id="ja-en-comic",
+        name="Japanese to English (comic detector)",
+        description="Comic-trained text and balloon detector + manga-ocr + opus-MT ja-en",
+        source_languages=["ja"],
+        target_languages=["en"],
+        detector_arch=COMIC_DETECTOR.repo_id,
+        detector_size=640,
+        recognizer_model="kha-white/manga-ocr-base",
+        translator_model="Helsinki-NLP/opus-mt-ja-en",
+        translator_uses_language_token=False,
+        translator_decoder_start_token="<pad>",
+        detector_kind="comic",
     ),
     # Chinese. The recogniser was trained on Japanese manga, but its vocabulary carries 4918
     # han characters against only 87 hiragana, so hanzi are well covered. Typography and layout
@@ -225,6 +269,28 @@ def export_detector(preset: Preset, work: Path) -> Path:
     )
     log(f"wrote {path.name}")
     return path
+
+
+def fetch_detector(model: HubFile, target: Path) -> None:
+    """
+    Copy a published detector into the pack, unmodified.
+
+    Nothing is converted. check_android_ops opens it with the runtime the app ships, which
+    implements every operator in it at the opset it was exported with, so the pack's detector is
+    the upstream file and anyone can check it against the hash pinned above.
+    """
+    from huggingface_hub import hf_hub_download
+
+    step(f"Fetching detector ({model.repo_id} @ {model.revision[:7]})")
+    cached = Path(hf_hub_download(model.repo_id, model.filename, revision=model.revision))
+    actual = sha256_of(cached)
+    if actual != model.sha256:
+        raise SystemExit(
+            f"\n{model.filename} from {model.repo_id} does not match its pinned hash.\n"
+            f"  expected {model.sha256}\n  got      {actual}"
+        )
+    shutil.copyfile(cached, target)
+    log(f"{target.name}: {target.stat().st_size / 1e6:.0f} MB, matches the pinned hash")
 
 
 # --------------------------------------------------------------------------------------
@@ -427,49 +493,108 @@ def quantize(source: Path, target: Path) -> None:
 # --------------------------------------------------------------------------------------
 
 EXPECTED_IO = {
-    "detector.onnx": (["input"], ["output"]),
     "recognizer_encoder.onnx": (["pixel_values"], ["last_hidden_state"]),
     "recognizer_decoder.onnx": (["input_ids", "encoder_hidden_states"], ["logits"]),
     "translator_encoder.onnx": (["input_ids"], ["last_hidden_state"]),
     "translator_decoder.onnx": (["encoder_hidden_states"], ["logits"]),
 }
 
+# What the app feeds each kind of detector and reads back from it.
+DETECTOR_IO = {
+    "dbnet": (["input"], ["output"]),
+    # The page size goes in because the graph maps its boxes back onto the page itself.
+    "comic": (["images", "orig_target_sizes"], ["labels", "boxes", "scores"]),
+}
 
-# Operators the desktop onnxruntime implements but the Android package does not. A model using
-# one of these loads and runs perfectly here and dies on a phone with ORT_NOT_IMPLEMENTED, which
-# is why loading the graph locally is not sufficient proof that a pack works.
-ANDROID_UNSUPPORTED_OPS = {
+
+# The onnxruntime the app ships. Keep it in step with `onnxruntime` in gradle/libs.versions.toml
+# on the app branch; this branch has no build that could read it from there.
+ANDROID_ORT_VERSION = "1.20.0"
+
+# How a pack came to contain an operator the phone cannot run, for the causes met so far. The
+# runtime's own message names the operator but not the build step that put it there.
+KNOWN_CAUSES = {
     "ConvInteger": "dynamic int8 quantisation of Conv layers; quantise MatMul only",
     "QLinearConv": "static int8 quantisation of Conv layers; quantise MatMul only",
 }
 
+# Run in a child process: this venv holds a newer onnxruntime for the export tooling, and one
+# process can import only one. The version goes out first so the caller can see which answered.
+LOAD_PROBE = """
+import json, sys
+import onnxruntime as ort
+print(ort.__version__, flush=True)
+for path in sys.argv[1:]:
+    try:
+        ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+        error = None
+    except Exception as failure:
+        error = str(failure).strip().splitlines()[0]
+    print(json.dumps({"path": path, "error": error}), flush=True)
+"""
+
+
+def android_runtime() -> Path:
+    """onnxruntime at ANDROID_ORT_VERSION, installed beside the venv on first use."""
+    target = Path(__file__).resolve().parent / ".android-ort" / ANDROID_ORT_VERSION
+    if not (target / "onnxruntime").is_dir():
+        step(f"Installing onnxruntime {ANDROID_ORT_VERSION}, the version the app ships")
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--quiet", "--no-deps",
+             "--target", str(target), f"onnxruntime=={ANDROID_ORT_VERSION}"],
+            check=True,
+        )
+    return target
+
 
 def check_android_ops(pack_dir: Path) -> bool:
     """
-    Reject operators ONNX Runtime cannot execute on Android.
+    Open every graph with the onnxruntime version the app ships.
 
-    The verification below opens every graph with the *desktop* runtime, which has a larger
-    kernel set than the Android AAR. That check therefore passes on exactly the models that fail
-    on a device, so the op types have to be inspected directly.
+    verify() below uses this venv's onnxruntime, which is newer than the phone's and implements
+    more: int8 ConvInteger loads under it and fails under 1.20. A list of operators to avoid only
+    catches the failures already met, so each graph goes to the phone's version instead, which
+    judges operator, opset and element type together. This is the desktop build of that version;
+    Android's CPU provider is built from the same kernel registrations, but a pack still has to
+    run on a device before it is published.
     """
-    import onnx
+    step(f"Opening every graph with onnxruntime {ANDROID_ORT_VERSION}, as the phone will")
+    paths = [str(path) for path in sorted(pack_dir.glob("*.onnx"))]
+    search_path = [str(android_runtime()), os.environ.get("PYTHONPATH", "")]
+    result = subprocess.run(
+        [sys.executable, "-c", LOAD_PROBE, *paths],
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, search_path))},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    lines = result.stdout.splitlines()
+    if result.returncode != 0 or len(lines) != len(paths) + 1:
+        log(f"FAIL could not run the check: {result.stderr.strip()[-500:]}")
+        return False
+    if lines[0] != ANDROID_ORT_VERSION:
+        # If PYTHONPATH did not take, the venv's newer runtime answered, and it passes graphs
+        # the phone rejects.
+        log(f"FAIL expected onnxruntime {ANDROID_ORT_VERSION}, but {lines[0]} answered")
+        return False
 
-    step("Checking for operators Android cannot run")
     ok = True
-    for path in sorted(pack_dir.glob("*.onnx")):
-        model = onnx.load(str(path), load_external_data=False)
-        used = {node.op_type for node in model.graph.node}
-        bad = used & ANDROID_UNSUPPORTED_OPS.keys()
-        if bad:
-            ok = False
-            for op in sorted(bad):
-                log(f"FAIL {path.name}: uses {op} - {ANDROID_UNSUPPORTED_OPS[op]}")
-        else:
-            log(f"ok   {path.name}")
+    for line in lines[1:]:
+        outcome = json.loads(line)
+        name = Path(outcome["path"]).name
+        error = outcome["error"]
+        if error is None:
+            log(f"ok   {name}")
+            continue
+        ok = False
+        log(f"FAIL {name}: {error}")
+        cause = next((hint for op, hint in KNOWN_CAUSES.items() if op in error), None)
+        if cause:
+            log(f"     cause: {cause}")
     return ok
 
 
-def verify(pack_dir: Path) -> bool:
+def verify(pack_dir: Path, detector_kind: str) -> bool:
     """
     Load every graph and check its IO names against what the app resolves.
 
@@ -480,7 +605,8 @@ def verify(pack_dir: Path) -> bool:
 
     step("Verifying exports")
     ok = True
-    for name, (want_inputs, want_outputs) in EXPECTED_IO.items():
+    expected = {"detector.onnx": DETECTOR_IO[detector_kind], **EXPECTED_IO}
+    for name, (want_inputs, want_outputs) in expected.items():
         path = pack_dir / name
         if not path.exists():
             log(f"FAIL {name}: missing")
@@ -536,26 +662,39 @@ def write_metadata(pack_dir: Path, preset: Preset, base_url: str) -> dict:
         "translator_vocab": "translator_vocab.json",
     }
 
-    detector_mean, detector_std = detector_normalization(preset)
-    log(f"detector normalisation: mean={detector_mean} std={detector_std}")
+    if preset.detector_kind == "comic":
+        detector_config = {
+            # Marks the settings as chosen, not inherited, so the app leaves them alone.
+            "config_version": 1,
+            "detector_kind": "comic",
+            # Written out rather than left to the app's default, so the pack keeps meaning the
+            # same thing if that default moves.
+            "detector_min_confidence": 0.5,
+        }
+    else:
+        detector_mean, detector_std = detector_normalization(preset)
+        log(f"detector normalisation: mean={detector_mean} std={detector_std}")
+        detector_config = {
+            "detector_input_size": preset.detector_size,
+            "detector_input_name": "input",
+            "detector_output_name": "output",
+            "detector_mean": detector_mean,
+            "detector_std": detector_std,
+            # Swept with tune_detector.py against a page whose four bubbles are known. At the
+            # library defaults (0.30 / 2.0 / 0.08) it recovered 0-2 of them and split those into
+            # single-glyph fragments; at these values it recovers all four as whole bubbles, and
+            # the page translates in 5.4s rather than 31s because there are fewer, better boxes.
+            # Merge slop scales with the smaller box, so it has to be generous: two 33px
+            # fragments of one vertical column sit 146px apart, which 2.0 could never bridge.
+            # Marks these as chosen, not inherited, so the app leaves them alone.
+            "config_version": 1,
+            "detector_threshold": 0.15,
+            "detector_merge_slop": 3.5,
+            "detector_box_expand": 0.15,
+        }
 
     config = {
-        "detector_input_size": preset.detector_size,
-        "detector_input_name": "input",
-        "detector_output_name": "output",
-        "detector_mean": detector_mean,
-        "detector_std": detector_std,
-        # Swept with tune_detector.py against a page whose four bubbles are known. At the
-        # library defaults (0.30 / 2.0 / 0.08) it recovered 0-2 of them and split those into
-        # single-glyph fragments; at these values it recovers all four as whole bubbles, and
-        # the page translates in 5.4s rather than 31s because there are fewer, better boxes.
-        # Merge slop scales with the smaller box, so it has to be generous: two 33px fragments
-        # of one vertical column sit 146px apart, which 2.0 could never bridge.
-        # Marks these as chosen, not inherited, so the app leaves them alone.
-        "config_version": 1,
-        "detector_threshold": 0.15,
-        "detector_merge_slop": 3.5,
-        "detector_box_expand": 0.15,
+        **detector_config,
         "translator_uses_language_token": preset.translator_uses_language_token,
         "translator_decoder_start_token": preset.translator_decoder_start_token,
         **preset.extra_config,
@@ -616,14 +755,19 @@ def build(
         dump_translator_vocab(
             preset.translator_model, work / "translator", pack_dir / "translator_vocab.json", preset
         )
-        if not verify(pack_dir):
+        if not verify(pack_dir, preset.detector_kind):
             raise SystemExit("\nVerification failed after re-dumping vocabularies.")
         write_metadata(pack_dir, preset, base_url)
         shutil.rmtree(work, ignore_errors=True)
         print(f"\nVocabularies rebuilt: {pack_dir}")
         return
 
-    detector_raw = export_detector(preset, work)
+    if preset.detector_kind == "comic":
+        # Used as published, so it is neither exported nor quantised. See fetch_detector.
+        fetch_detector(COMIC_DETECTOR, pack_dir / "detector.onnx")
+        detector_exports = []
+    else:
+        detector_exports = [(export_detector(preset, work), pack_dir / "detector.onnx")]
 
     step(f"Exporting recogniser ({preset.recognizer_model})")
     recognizer_dir = export_onnx_model(preset.recognizer_model, "image-to-text", work / "recognizer")
@@ -633,8 +777,7 @@ def build(
         preset.translator_model, "text2text-generation", work / "translator"
     )
 
-    exports = [
-        (detector_raw, pack_dir / "detector.onnx"),
+    exports = detector_exports + [
         (pick(recognizer_dir, "encoder_model.onnx"), pack_dir / "recognizer_encoder.onnx"),
         (pick(recognizer_dir, "decoder_model.onnx"), pack_dir / "recognizer_decoder.onnx"),
         (pick(translator_dir, "encoder_model.onnx"), pack_dir / "translator_encoder.onnx"),
@@ -658,11 +801,11 @@ def build(
 
     if not check_android_ops(pack_dir):
         raise SystemExit(
-            "\nPack uses operators ONNX Runtime cannot execute on Android. "
-            "It would load here and fail on a phone."
+            f"\nThe pack does not load in onnxruntime {ANDROID_ORT_VERSION}, the version the app "
+            "ships. It would load here and fail on a phone."
         )
 
-    if not verify(pack_dir):
+    if not verify(pack_dir, preset.detector_kind):
         raise SystemExit(
             "\nVerification failed. The pack would not load on device.\n"
             "Tensor names vary between Optimum versions - set the *_name keys in the pack's\n"

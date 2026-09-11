@@ -54,9 +54,10 @@ writes `out/ja-en-base/` plus an `out/manifest.json`.
 
 Expect roughly 15–30 minutes on a first run, most of it model download.
 
-| Preset | Translator | Pack size (int8) | Notes |
+| Preset | Translator | Pack size | Notes |
 |---|---|---|---|
-| `ja-en` | opus-MT ja-en | **~130 MB** | Default. The only size class that is comfortable on a phone. |
+| `ja-en` | opus-MT ja-en | **~280 MB** | Default. DBNet detector. |
+| `ja-en-comic` | opus-MT ja-en | ~430 MB | Detector trained on comics, which also finds speech balloons. Fetched as published and pinned by hash. |
 | `ja-multi` | NLLB-200 distilled 600M | ~700 MB | Seven target languages, much slower per bubble. |
 
 Useful flags:
@@ -94,6 +95,11 @@ adb shell run-as app.yaku.dev cp -r /data/local/tmp/ja-en-base files/translation
 Then enable the toggle in Settings → Translation.
 
 ## If verification fails
+
+Every graph is first opened with onnxruntime 1.20.0 — the version the app ships, installed into
+`.android-ort/` on first use — because the venv's newer onnxruntime accepts graphs the phone
+rejects. A failure there names the operator, and the builder adds the likely cause when it knows
+one.
 
 The builder refuses to emit a pack whose graphs the app could not load, and prints the tensor
 names each model actually exposes. Optimum changes these between versions.

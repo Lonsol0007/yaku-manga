@@ -38,6 +38,7 @@ PAGE = (1200, 1700)
 # Mirrors OnnxTextDetector.
 MERGE_SLOP = 3.5
 MERGE_MAX_SIZE_RATIO = 3.0
+MAX_BOX_AREA_RATIO = 0.12  # mirrors detector_max_box_area_ratio
 
 BUBBLES = [
     ("おはよう", (300, 260), False),
@@ -86,7 +87,7 @@ def intersects(a, b, slop_x, slop_y) -> bool:
                 a[3] + slop_y < b[1] or b[3] + slop_y < a[1])
 
 
-def merge_neighbours(boxes: list) -> list:
+def merge_neighbours(boxes: list, max_area: float = float('inf')) -> list:
     """Port of OnnxTextDetector.mergeNeighbours - vertical kana arrive as separate blobs."""
     working = [list(b) for b in boxes]
     merged = True
@@ -97,11 +98,19 @@ def merge_neighbours(boxes: list) -> list:
                 a, b = working[i], working[j]
                 aw, ah = a[2] - a[0], a[3] - a[1]
                 bw, bh = b[2] - b[0], b[3] - b[1]
-                if not intersects(a, b, min(aw, bw) * MERGE_SLOP, min(ah, bh) * MERGE_SLOP):
+                # mirrors OnnxTextDetector: reach from the short side of each box
+                reach = min(min(aw, ah), min(bw, bh)) * MERGE_SLOP
+                if not intersects(a, b, reach, reach):
                     continue
-                if max(ah, bh) / max(1.0, min(ah, bh)) > MERGE_MAX_SIZE_RATIO:
+                # mirrors OnnxTextDetector: compare lettering size, not line length
+                ta, tb = min(aw, ah), min(bw, bh)
+                if max(ta, tb) / max(1.0, min(ta, tb)) > MERGE_MAX_SIZE_RATIO:
                     continue
-                working[i] = [min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])]
+                union = [min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])]
+                # mirrors OnnxTextDetector: refuse a merge that would run away
+                if (union[2] - union[0]) * (union[3] - union[1]) > max_area:
+                    continue
+                working[i] = union
                 working.pop(j)
                 merged = True
                 break
@@ -134,7 +143,13 @@ def detect(session, config: dict, page: Image.Image):
         raw.append((float(xs.start), float(ys.start), float(xs.stop), float(ys.stop)))
     print(f"  {count} blobs -> {len(raw)} above min area")
 
-    merged = merge_neighbours(raw)
+    # These boxes are still in letterboxed model space, where the page occupies
+    # (width * scale) x (height * scale) and the rest is padding. The Kotlin unmaps to page
+    # coordinates before it filters, so the cap has to be expressed in this space to mean the
+    # same fraction of the page.
+    max_area = MAX_BOX_AREA_RATIO * (page.width * scale) * (page.height * scale)
+    merged = [b for b in merge_neighbours(raw, max_area)
+              if (b[2] - b[0]) * (b[3] - b[1]) <= max_area]
     print(f"  {len(merged)} after proximity merge")
 
     boxes = []

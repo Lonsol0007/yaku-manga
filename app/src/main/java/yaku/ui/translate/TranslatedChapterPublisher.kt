@@ -8,6 +8,7 @@ import logcat.LogPriority
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import yaku.core.common.util.system.logcat
+import yaku.domain.chapter.interactor.GetChaptersByMangaId
 import yaku.domain.chapter.interactor.SyncChaptersWithSource
 import yaku.domain.manga.interactor.NetworkToLocalManga
 import yaku.domain.manga.model.Manga
@@ -32,6 +33,7 @@ class TranslatedChapterPublisher(
     private val sourceManager: SourceManager,
     private val networkToLocalManga: NetworkToLocalManga,
     private val syncChaptersWithSource: SyncChaptersWithSource,
+    private val getChaptersByMangaId: GetChaptersByMangaId,
 ) {
 
     /** Where the reader should be sent once the pages are filed. */
@@ -57,14 +59,20 @@ class TranslatedChapterPublisher(
         // chapter ourselves: it decides how a directory becomes a chapter, and a hand-built
         // SChapter that disagreed with it would sync once and then never match again.
         val update = local.getMangaUpdate(sManga, emptyList(), fetchDetails = true, fetchChapters = true)
+        val filed = update.chapters.firstOrNull { it.name == names.chapter } ?: run {
+            logcat(LogPriority.WARN) { "Local source did not list the chapter just filed: ${names.chapter}" }
+            return@withContext null
+        }
 
         val manga = networkToLocalManga(
             Manga.create().copy(url = sManga.url, title = sManga.title, source = LocalSource.ID),
         )
-        val chapters = syncChaptersWithSource.await(update.chapters, manga, local)
+        syncChaptersWithSource.await(update.chapters, manga, local)
 
-        val chapterId = chapters.firstOrNull { it.name == names.chapter }?.id
-            ?: chapters.maxByOrNull { it.dateUpload }?.id
+        // Sync answers with the chapters it has just added, so a link translated a second time -
+        // after installing a better pack, say - got nothing back and the reader never opened.
+        // Read the chapter back from the database instead, by the address the source gave it.
+        val chapterId = getChaptersByMangaId.await(manga.id).firstOrNull { it.url == filed.url }?.id
             ?: return@withContext null
 
         Target(mangaId = manga.id, chapterId = chapterId)
@@ -93,8 +101,19 @@ class TranslatedChapterPublisher(
                 return false
             }
         }
+
+        // A chapter translated again can come out shorter, and the pages of the earlier run past
+        // the new end would otherwise stay on as its last pages. Only files this class names are
+        // touched; anything else in the directory is left where it is.
+        chapterDir.listFiles().orEmpty()
+            .filter { pageIndex(it.name) >= pages.size }
+            .forEach { it.delete() }
         return true
     }
+
+    /** The number in a page file's name, or -1 for any file this class did not write. */
+    private fun pageIndex(fileName: String?): Int =
+        fileName?.let { PAGE_FILE.matchEntire(it) }?.groupValues?.get(1)?.toIntOrNull() ?: -1
 
     private class Names(val series: String, val chapter: String)
 
@@ -141,6 +160,7 @@ class TranslatedChapterPublisher(
         const val FALLBACK_SERIES = "Translations"
         const val FALLBACK_CHAPTER = "Translated pages"
 
+        val PAGE_FILE = Regex("""page_(\d+)\.jpg""")
         val CHAPTER_MARKER = Regex("""chapter[-_ ]?\d""", RegexOption.IGNORE_CASE)
         val ILLEGAL_IN_NAMES = charArrayOf('/', '\\', ':', '*', '?', '"', '<', '>', '|')
         val WHITESPACE_RUN = Regex("""\s+""")

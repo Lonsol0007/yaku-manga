@@ -52,7 +52,7 @@ class TranslationPreferences(
      */
     val packSources: Preference<Set<String>> = preferenceStore.getStringSet(
         "pref_translation_pack_sources",
-        setOf(DEFAULT_PACK_SOURCE),
+        DEFAULT_PACK_SOURCES,
     )
 
     val wifiOnlyDownloads: Preference<Boolean> =
@@ -75,7 +75,20 @@ class TranslationPreferences(
          * has to stay pinned to the exact files it was generated against. A moving target would
          * start failing checksums the moment the packs were rebuilt.
          */
-        const val DEFAULT_PACK_SOURCE =
+        const val PACK_SOURCE_V1 =
             "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v1/manifest.json"
+
+        /**
+         * Packs that need this version of the app or a later one.
+         *
+         * Earlier versions read only [PACK_SOURCE_V1] and skip settings they do not recognise, so a
+         * pack listed there that depends on a newer one - a comic detector - would be offered to
+         * them and then fail on every page. A manifest they never read is the only way to keep
+         * such a pack from them.
+         */
+        const val PACK_SOURCE_V2 =
+            "https://github.com/Lonsol0007/yaku-manga/releases/download/packs-v2/manifest.json"
+
+        val DEFAULT_PACK_SOURCES = setOf(PACK_SOURCE_V1, PACK_SOURCE_V2)
     }
 }

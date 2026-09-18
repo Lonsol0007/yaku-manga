@@ -901,19 +901,31 @@ class ReaderViewModel(
     }
 
     /**
-     * Whether asking for a translation could do anything.
+     * What stands between the reader and a translated page, if anything.
      *
-     * Offering the action with the feature switched off, or with no pack chosen, produces a
-     * button that appears to work and changes nothing - which is indistinguishable from the
-     * translation having failed.
+     * The action is shown in every case. Hiding it whenever translation was not set up made the
+     * feature look absent from the reader, which is how it was reported; naming the switch to
+     * turn on is worth more than a button that is not there.
      */
-    val canTranslate: Boolean
-        get() = translationPreferences.enabled.get() &&
-            translationPreferences.activePackId.get().isNotBlank()
+    val translationReadiness: TranslationReadiness
+        get() = when {
+            !translationPreferences.enabled.get() -> TranslationReadiness.FeatureOff
+            translationPreferences.activePackId.get().isBlank() -> TranslationReadiness.NoPack
+            else -> TranslationReadiness.Ready
+        }
 
     /** Ask for the page in the open dialog to be translated. The holder re-renders it. */
     fun translatePage() {
         val page = (state.value.dialog as? Dialog.PageActions)?.page ?: return
+        if (page.status != Page.State.Ready) return
+        page.translationRequested.value = true
+    }
+
+    /** Ask for the page on screen to be translated, for the action in the reader's own bar. */
+    fun translateCurrentPage() {
+        val pages = state.value.currentChapter?.pages ?: return
+        // currentPage counts from one, as the page slider shows it.
+        val page = pages.getOrNull(state.value.currentPage - 1) ?: return
         if (page.status != Page.State.Ready) return
         page.translationRequested.value = true
     }
@@ -990,6 +1002,9 @@ class ReaderViewModel(
             downloadManager.deletePendingChapters()
         }
     }
+
+    /** Why the reader cannot translate a page yet, or [Ready] when it can. */
+    enum class TranslationReadiness { Ready, FeatureOff, NoPack }
 
     @Immutable
     data class State(

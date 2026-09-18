@@ -32,7 +32,6 @@ fun ReaderPageActionsDialog(
     onSetAsCover: () -> Unit,
     onShare: (Boolean) -> Unit,
     onSave: () -> Unit,
-    canTranslate: Boolean,
     onTranslate: () -> Unit,
 ) {
     var showSetCoverDialog by remember { mutableStateOf(false) }
@@ -75,19 +74,17 @@ fun ReaderPageActionsDialog(
                     onDismissRequest()
                 },
             )
-            // Only when a pack is installed and the feature is on; otherwise the button would
-            // dismiss the sheet and leave the page exactly as it was.
-            if (canTranslate) {
-                ActionButton(
-                    modifier = Modifier.weight(1f),
-                    title = stringResource(MR.strings.action_translate_page),
-                    icon = Icons.Outlined.Translate,
-                    onClick = {
-                        onTranslate()
-                        onDismissRequest()
-                    },
-                )
-            }
+            // Offered even when translation is not set up: the caller answers with what is
+            // missing, which a button that is simply absent cannot do.
+            ActionButton(
+                modifier = Modifier.weight(1f),
+                title = stringResource(MR.strings.action_translate_page),
+                icon = Icons.Outlined.Translate,
+                onClick = {
+                    onTranslate()
+                    onDismissRequest()
+                },
+            )
         }
     }
 

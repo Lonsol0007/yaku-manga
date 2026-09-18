@@ -333,8 +333,7 @@ class ReaderActivity : BaseActivity() {
                     onSetAsCover = viewModel::setAsCover,
                     onShare = viewModel::shareImage,
                     onSave = viewModel::saveImage,
-                    canTranslate = viewModel.canTranslate,
-                    onTranslate = viewModel::translatePage,
+                    onTranslate = { requestTranslation(viewModel::translatePage) },
                 )
             }
             null -> {}
@@ -486,6 +485,7 @@ class ReaderActivity : BaseActivity() {
             onOpenInWebView = ::openChapterInWebView.takeIf { isHttpSource },
             onOpenInBrowser = ::openChapterInBrowser.takeIf { isHttpSource },
             onShare = ::shareChapter.takeIf { isHttpSource },
+            onTranslate = { requestTranslation(viewModel::translateCurrentPage) },
 
             chapterNavigatorType = if (!verticalNavigator) {
                 if (state.viewer is R2LPagerViewer || (state.viewer as? WebGpuViewer)?.isReversed ?: false) {
@@ -703,6 +703,20 @@ class ReaderActivity : BaseActivity() {
      */
     fun onPageSelected(page: ReaderPage) {
         viewModel.onPageSelected(page)
+    }
+
+    /**
+     * Translates when translation is ready, and says what is missing when it is not.
+     *
+     * Readiness is read as the action is tapped rather than when the bar was drawn, so turning
+     * the feature on in settings and coming straight back works without reopening the chapter.
+     */
+    private fun requestTranslation(translate: () -> Unit) {
+        when (viewModel.translationReadiness) {
+            ReaderViewModel.TranslationReadiness.Ready -> translate()
+            ReaderViewModel.TranslationReadiness.FeatureOff -> toast(MR.strings.translate_needs_enabling)
+            ReaderViewModel.TranslationReadiness.NoPack -> toast(MR.strings.translate_needs_pack)
+        }
     }
 
     /**

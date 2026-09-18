@@ -3,6 +3,7 @@ package yaku.presentation.reader.appbars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,6 +22,7 @@ fun ReaderTopBar(
     onOpenInWebView: (() -> Unit)?,
     onOpenInBrowser: (() -> Unit)?,
     onShare: (() -> Unit)?,
+    onTranslate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     AppBar(
@@ -47,6 +49,15 @@ fun ReaderTopBar(
                                 Icons.Outlined.BookmarkBorder
                             },
                             onClick = onToggleBookmarked,
+                        ),
+                    )
+                    // Beside the bookmark rather than in the overflow: translation is what
+                    // this app is for, and behind a long press on the page it was never found.
+                    add(
+                        AppBar.Action(
+                            title = stringResource(MR.strings.action_translate_page),
+                            icon = Icons.Outlined.Translate,
+                            onClick = onTranslate,
                         ),
                     )
                     onOpenInWebView?.let {

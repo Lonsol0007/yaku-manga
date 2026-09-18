@@ -24,6 +24,7 @@ import yaku.data.Mangas
 import yaku.data.MemoColumnAdapter
 import yaku.data.StringListColumnAdapter
 import yaku.data.UpdateStrategyColumnAdapter
+import yaku.data.backup.models.BackupSerializersModule
 
 @BindingContainer
 object AppBindings {
@@ -79,7 +80,8 @@ object AppBindings {
         setIndent(2)
     }
 
+    // Carries the backup format's own type names; see BackupSerializersModule.
     @Provides
     @SingleIn(AppScope::class)
-    fun providesProtoBuf(): ProtoBuf = ProtoBuf
+    fun providesProtoBuf(): ProtoBuf = ProtoBuf { serializersModule = BackupSerializersModule }
 }

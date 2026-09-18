@@ -155,19 +155,23 @@ class LinkTranslateViewModel(
         val translated = _state.value.pages
         // Filed before the stage goes idle, so the screen never shows a finished run with no
         // reader to open - the pages are either readable or the failure is on screen.
-        val target = if (translated.isEmpty()) {
-            null
+        val outcome = if (translated.isEmpty()) {
+            TranslatedChapterPublisher.Outcome.Failed
         } else {
             runCatching { publisher.publish(url, translated.map { it.file }) }
                 .onFailure { logcat(LogPriority.ERROR, it) { "Could not file the translated chapter" } }
-                .getOrNull()
+                .getOrDefault(TranslatedChapterPublisher.Outcome.Failed)
         }
 
         _state.update {
             it.copy(
                 stage = Stage.Idle,
-                readerTarget = target,
+                readerTarget = (outcome as? TranslatedChapterPublisher.Outcome.Filed)?.target,
                 error = when {
+                    // The pages are on screen either way, so this is the one failure worth
+                    // reporting next to a translation that worked.
+                    outcome is TranslatedChapterPublisher.Outcome.NoStorageLocation ->
+                        Error.NoStorageLocation
                     it.pages.isNotEmpty() -> null
                     tooSmall > 0 -> Error.TooSmall(tooSmall)
                     else -> Error.AllFailed
@@ -305,6 +309,9 @@ class LinkTranslateViewModel(
         data class TooSmall(val count: Int) : Error
         data object TranslationOff : Error
         data class UnsupportedType(val contentType: String) : Error
+
+        /** Translated, but with no storage location there is no chapter for the reader to open. */
+        data object NoStorageLocation : Error
         data class Http(val code: Int) : Error
         data class Unreachable(val reason: String) : Error
     }

@@ -1,5 +1,6 @@
 package yaku.ui.translate
 
+import com.hippo.unifile.UniFile
 import dev.zacsweers.metro.Inject
 import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.Dispatchers
@@ -39,16 +40,36 @@ class TranslatedChapterPublisher(
     /** Where the reader should be sent once the pages are filed. */
     data class Target(val mangaId: Long, val chapterId: Long)
 
-    suspend fun publish(sourceUrl: String, pages: List<File>): Target? = withContext(Dispatchers.IO) {
-        if (pages.isEmpty()) return@withContext null
+    sealed interface Outcome {
+        data class Filed(val target: Target) : Outcome
+
+        /**
+         * No storage location is set, so the local source has no directory to read a chapter from.
+         *
+         * Worth telling apart from any other failure: it is the state a phone is in until someone
+         * picks a folder, and a translation on a fresh install otherwise ended with the pages
+         * listed and nothing said about why the reader never opened.
+         */
+        data object NoStorageLocation : Outcome
+
+        data object Failed : Outcome
+    }
+
+    suspend fun publish(sourceUrl: String, pages: List<File>): Outcome = withContext(Dispatchers.IO) {
+        if (pages.isEmpty()) return@withContext Outcome.Failed
 
         val local = sourceManager.get(LocalSource.ID) as? LocalSource ?: run {
             logcat(LogPriority.WARN) { "Local source unavailable; cannot open translation in reader" }
-            return@withContext null
+            return@withContext Outcome.Failed
+        }
+
+        val base = storageManager.getLocalSourceDirectory() ?: run {
+            logcat(LogPriority.WARN) { "No storage location set; cannot file the translation" }
+            return@withContext Outcome.NoStorageLocation
         }
 
         val names = namesFor(sourceUrl)
-        if (!writePages(names, pages)) return@withContext null
+        if (!writePages(base, names, pages)) return@withContext Outcome.Failed
 
         val sManga = SManga.create().apply {
             url = names.series
@@ -61,7 +82,7 @@ class TranslatedChapterPublisher(
         val update = local.getMangaUpdate(sManga, emptyList(), fetchDetails = true, fetchChapters = true)
         val filed = update.chapters.firstOrNull { it.name == names.chapter } ?: run {
             logcat(LogPriority.WARN) { "Local source did not list the chapter just filed: ${names.chapter}" }
-            return@withContext null
+            return@withContext Outcome.Failed
         }
 
         val manga = networkToLocalManga(
@@ -73,17 +94,12 @@ class TranslatedChapterPublisher(
         // after installing a better pack, say - got nothing back and the reader never opened.
         // Read the chapter back from the database instead, by the address the source gave it.
         val chapterId = getChaptersByMangaId.await(manga.id).firstOrNull { it.url == filed.url }?.id
-            ?: return@withContext null
+            ?: return@withContext Outcome.Failed
 
-        Target(mangaId = manga.id, chapterId = chapterId)
+        Outcome.Filed(Target(mangaId = manga.id, chapterId = chapterId))
     }
 
-    private fun writePages(names: Names, pages: List<File>): Boolean {
-        val base = storageManager.getLocalSourceDirectory() ?: run {
-            logcat(LogPriority.WARN) { "No local source directory; cannot file the translation" }
-            return false
-        }
-
+    private fun writePages(base: UniFile, names: Names, pages: List<File>): Boolean {
         val seriesDir = base.findFile(names.series)?.takeIf { it.isDirectory }
             ?: base.createDirectory(names.series)
             ?: return false

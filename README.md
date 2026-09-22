@@ -170,6 +170,24 @@ Requires JDK 21 and the Android SDK (compileSdk 37). Optional Gradle properties:
 | `-Pinclude-telemetry` | Compiles in Firebase Crashlytics. Off by default. |
 | `-Penable-updater` | Compiles in the in-app updater. Off by default. |
 
+## The translation pipeline on a desktop
+
+The same pipeline is also available as a Python package and command line tool under
+[`python/`](python/) — a port of the app's `:translation` module that reads the same model
+packs and produces the same lettered pages, running over image files instead of inside the
+reader.
+
+```bash
+cd python && pip install -e .
+yaku-translate packs install <pack-id>
+yaku-translate batch volume.cbz -o out/ --cbz volume.translated.cbz
+```
+
+It is not a replacement for the app — there is no library, no sources and no reader — but it
+is the quickest way to try a pack, batch-translate a volume, or work on the detection,
+balloon-finding and typesetting without a Gradle build and an emulator. See
+[`python/README.md`](python/README.md).
+
 ## Credits
 
 Yaku Manga exists because of the work of the Mihon contributors and, before them, Tachiyomi's.

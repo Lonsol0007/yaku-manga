@@ -3,6 +3,14 @@
 .kotlin
 build
 
+# Python (python/ - the translation pipeline port)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+
 # IDE files
 *.iml
 .idea/*

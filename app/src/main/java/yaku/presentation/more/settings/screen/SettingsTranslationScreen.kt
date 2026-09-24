@@ -22,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +42,7 @@ import yaku.presentation.core.i18n.stringResource
 import yaku.presentation.more.settings.Preference
 import yaku.translation.model.TranslationLanguage
 import yaku.translation.store.ModelPack
+import yaku.ui.reader.translation.PackInstaller
 import yaku.ui.reader.translation.PageTranslator
 import yaku.ui.reader.translation.TranslationPreferences
 
@@ -56,6 +58,7 @@ object SettingsTranslationScreen : SearchableSettings {
         val graph = remember { context.appGraph }
         val prefs = remember { graph.translationPreferences }
         val translator = remember { graph.pageTranslator }
+        val installer = remember { graph.packInstaller }
 
         // Bumped when a download finishes. Without it the installed list is read once and a
         // freshly downloaded pack stays unselectable until Settings is left and reopened.
@@ -128,7 +131,7 @@ object SettingsTranslationScreen : SearchableSettings {
                     Preference.PreferenceItem.CustomPreference(
                         title = stringResource(MR.strings.pref_translation_browse_packs),
                     ) {
-                        PackDownloader(translator, prefs, onInstalled = { installedToken++ })
+                        PackDownloader(translator, installer, prefs, onInstalled = { installedToken++ })
                     },
                     Preference.PreferenceItem.CustomPreference(
                         title = stringResource(MR.strings.pref_translation_installed_packs),
@@ -276,6 +279,7 @@ private fun PackSources(prefs: TranslationPreferences) {
 @Composable
 private fun PackDownloader(
     translator: PageTranslator,
+    installer: PackInstaller,
     prefs: TranslationPreferences,
     onInstalled: () -> Unit,
 ) {
@@ -288,7 +292,17 @@ private fun PackDownloader(
     var failures by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var showDialog by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
-    var progress by remember { mutableStateOf<Float?>(null) }
+
+    // The download belongs to the installer rather than to this screen, so it carries on when
+    // Settings is left and its progress is picked up again here on return.
+    val download by installer.state.collectAsState()
+    val running = download as? PackInstaller.State.Running
+
+    // Re-read the installed list once a pack lands, so it is selectable and the master switch
+    // enables without leaving Settings.
+    LaunchedEffect(download) {
+        if (download is PackInstaller.State.Finished) onInstalled()
+    }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         OutlinedButton(
@@ -311,18 +325,32 @@ private fun PackDownloader(
                     showDialog = true
                 }
             },
-            enabled = progress == null,
+            enabled = running == null,
         ) {
             Text(stringResource(MR.strings.pref_translation_browse_packs))
         }
 
-        progress?.let {
-            LinearProgressIndicator(
-                progress = { it },
+        running?.let {
+            Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LinearProgressIndicator(
+                    progress = { it.fraction },
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = installer::cancel) {
+                    Text(stringResource(MR.strings.action_cancel))
+                }
+            }
         }
-        status?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
+        val downloadStatus = when (val state = download) {
+            is PackInstaller.State.Failed -> state.message ?: failedLabel
+            is PackInstaller.State.Incomplete -> incompleteLabel
+            is PackInstaller.State.Finished -> "Downloaded ${state.pack.name}"
+            else -> null
+        }
+        (status ?: downloadStatus)?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
     }
 
     if (showDialog) {
@@ -385,45 +413,8 @@ private fun PackDownloader(
                                         status = wifiRequiredMessage
                                         return@Button
                                     }
-                                    scope.launch {
-                                        progress = 0f
-                                        // Deliberately not Flow.catch: it handles the error and
-                                        // lets the flow complete *normally*, so everything after
-                                        // it ran on failure too - reporting "Downloaded" for a
-                                        // download that never happened and selecting a pack that
-                                        // was never installed.
-                                        val outcome = runCatching {
-                                            translator.repository.download(pack)
-                                                .collect { progress = it.fraction }
-                                        }
-                                        progress = null
-
-                                        // Confirm against disk rather than trusting the flow to
-                                        // have finished its work. That is what "Downloaded"
-                                        // should mean, and it is cheap to verify.
-                                        val landed = translator.repository.installedPack(pack.id)
-
-                                        status = when {
-                                            outcome.isFailure ->
-                                                outcome.exceptionOrNull()?.message ?: failedLabel
-                                            landed == null -> incompleteLabel
-                                            else -> {
-                                                // Adopt the new pack when nothing valid is
-                                                // selected; a deliberate choice is left alone.
-                                                val current = prefs.activePackId.get()
-                                                val valid = translator.repository
-                                                    .installedPacks().any { it.id == current }
-                                                if (!valid) {
-                                                    prefs.activePackId.set(pack.id)
-                                                    translator.release()
-                                                }
-                                                "Downloaded ${pack.name}"
-                                            }
-                                        }
-                                        // Re-read the installed list so the pack is selectable
-                                        // and the master switch enables without leaving Settings.
-                                        onInstalled()
-                                    }
+                                    status = null
+                                    installer.start(pack)
                                 },
                             ) {
                                 Text(stringResource(MR.strings.action_download))

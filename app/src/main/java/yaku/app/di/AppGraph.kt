@@ -49,6 +49,7 @@ import yaku.ui.base.delegate.SecureActivityDelegateImpl
 import yaku.ui.main.MainActivity
 import yaku.ui.reader.ReaderActivity
 import yaku.ui.reader.setting.ReaderPreferences
+import yaku.ui.reader.translation.PackInstaller
 import yaku.ui.reader.translation.PageTranslator
 import yaku.ui.reader.translation.TranslationPreferences
 import yaku.ui.setting.track.BaseOAuthLoginActivity
@@ -104,6 +105,7 @@ interface AppGraph : ViewModelGraph {
     val trackerManager: TrackerManager
     val extensionManager: ExtensionManager
     val pageTranslator: PageTranslator
+    val packInstaller: PackInstaller
 
     val chapterCache: ChapterCache
     val downloadCache: DownloadCache

@@ -39,8 +39,8 @@ import kotlinx.coroutines.launch
 import yaku.app.di.appGraph
 import yaku.i18n.MR
 import yaku.presentation.core.i18n.stringResource
+import yaku.presentation.core.util.collectAsState
 import yaku.presentation.more.settings.Preference
-import yaku.translation.model.TranslationLanguage
 import yaku.translation.store.ModelPack
 import yaku.ui.reader.translation.PackInstaller
 import yaku.ui.reader.translation.PageTranslator
@@ -74,6 +74,13 @@ object SettingsTranslationScreen : SearchableSettings {
             }
         }
 
+        // Only the languages the active pack can translate. Every published pack is one fixed
+        // pair, and offering ten languages each way made a choice the pack went on to ignore.
+        val activePackId by prefs.activePackId.collectAsState()
+        val activePack = installed.firstOrNull { it.id == activePackId }
+        val sourceEntries = remember(activePack) { languageEntries(activePack?.sourceLanguages) }
+        val targetEntries = remember(activePack) { languageEntries(activePack?.targetLanguages) }
+
         return listOf(
             Preference.PreferenceItem.InfoPreference(
                 title = stringResource(MR.strings.pref_translation_info),
@@ -94,13 +101,15 @@ object SettingsTranslationScreen : SearchableSettings {
                 preferenceItems = listOf(
                     Preference.PreferenceItem.ListPreference(
                         preference = prefs.sourceLanguage,
-                        entries = TranslationLanguage.entries.associate { it.code to it.displayName },
+                        entries = sourceEntries,
                         title = stringResource(MR.strings.pref_translation_source_language),
+                        subtitleProvider = { value, entries -> languageInUse(value, entries) },
                     ),
                     Preference.PreferenceItem.ListPreference(
                         preference = prefs.targetLanguage,
-                        entries = TranslationLanguage.entries.associate { it.code to it.displayName },
+                        entries = targetEntries,
                         title = stringResource(MR.strings.pref_translation_target_language),
+                        subtitleProvider = { value, entries -> languageInUse(value, entries) },
                     ),
                 ),
             ),
@@ -161,6 +170,13 @@ object SettingsTranslationScreen : SearchableSettings {
         )
     }
 }
+
+private fun languageEntries(declared: List<String>?): Map<String, String> =
+    TranslationPreferences.offered(declared.orEmpty()).associate { it.code to it.displayName }
+
+/** The language that will be used: a choice the pack does not offer gives way to the first it does. */
+private fun languageInUse(value: String, entries: Map<String, String>): String =
+    entries[value] ?: entries.values.first()
 
 /**
  * Add and remove pack manifests.

@@ -6,6 +6,7 @@ import dev.zacsweers.metro.SingleIn
 import yaku.core.common.preference.Preference
 import yaku.core.common.preference.PreferenceStore
 import yaku.translation.model.TranslationLanguage
+import yaku.translation.store.ModelPack
 
 @Inject
 @SingleIn(AppScope::class)
@@ -61,13 +62,28 @@ class TranslationPreferences(
     /** Keep the last N translated pages in memory so flipping back is instant. */
     val pageCacheSize: Preference<Int> = preferenceStore.getInt("pref_translation_page_cache", 4)
 
-    fun source(): TranslationLanguage =
-        TranslationLanguage.fromCode(sourceLanguage.get()) ?: TranslationLanguage.JAPANESE
+    /** The source language to translate [pack] from: the one chosen if it offers it. See [offered]. */
+    fun source(pack: ModelPack): TranslationLanguage = resolve(sourceLanguage.get(), pack.sourceLanguages)
 
-    fun target(): TranslationLanguage =
-        TranslationLanguage.fromCode(targetLanguage.get()) ?: TranslationLanguage.ENGLISH
+    /** The target language to translate [pack] into: the one chosen if it offers it. See [offered]. */
+    fun target(pack: ModelPack): TranslationLanguage = resolve(targetLanguage.get(), pack.targetLanguages)
 
     companion object {
+        /**
+         * The languages a pack offers: the ones it declares, or every language when it declares none.
+         *
+         * Every published pack translates one fixed pair, so a choice outside what the pack
+         * declares was never a choice - the pack translated its own pair regardless. A choice it
+         * does not offer gives way to the first language it does.
+         */
+        fun offered(declared: List<String>): List<TranslationLanguage> =
+            declared.mapNotNull(TranslationLanguage::fromCode).ifEmpty { TranslationLanguage.entries }
+
+        private fun resolve(chosen: String, declared: List<String>): TranslationLanguage {
+            val offered = offered(declared)
+            return offered.firstOrNull { it.code == chosen } ?: offered.first()
+        }
+
         /**
          * Packs published alongside the app's own releases.
          *

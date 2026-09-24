@@ -52,27 +52,41 @@ class OnnxTranslationEngine(
     private fun loadIfNeeded() {
         if (detector != null && recognizer != null && translator != null) return
 
-        // Both kinds answer the same question and nothing downstream can tell them apart,
-        // but they arrive at it so differently that they cannot share an implementation: one
-        // thresholds a map and groups blobs, the other reads boxes the model already drew.
-        val detectorModel = OrtModel.open(file(pack.detector.name), threads)
-        detector = if (pack.config.detectorKind == COMIC_DETECTOR) {
-            OnnxComicDetector(detectorModel, pack.config)
-        } else {
-            OnnxTextDetector(detectorModel, pack.config)
+        // A pack can fail part way through loading - a missing or corrupt file, or a graph
+        // without the input a stage expects - after other sessions have already opened. Each
+        // holds tens to hundreds of MB of native memory that nothing else would free, and the
+        // next page would open them all again. So nothing is kept unless everything loads.
+        val opened = mutableListOf<OrtModel>()
+        fun openModel(name: String) = OrtModel.open(file(name), threads).also { opened += it }
+        try {
+            // Both kinds answer the same question and nothing downstream can tell them apart,
+            // but they arrive at it so differently that they cannot share an implementation: one
+            // thresholds a map and groups blobs, the other reads boxes the model already drew.
+            val detectorModel = openModel(pack.detector.name)
+            val newDetector = if (pack.config.detectorKind == COMIC_DETECTOR) {
+                OnnxComicDetector(detectorModel, pack.config)
+            } else {
+                OnnxTextDetector(detectorModel, pack.config)
+            }
+            val newRecognizer = OnnxTextRecognizer(
+                encoder = openModel(pack.recognizerEncoder.name),
+                decoder = openModel(pack.recognizerDecoder.name),
+                vocab = OnnxTextRecognizer.loadVocab(file(pack.recognizerVocab.name), json),
+                config = pack.config,
+            )
+            val newTranslator = OnnxTranslator(
+                encoder = openModel(pack.translatorEncoder.name),
+                decoder = openModel(pack.translatorDecoder.name),
+                tokenizer = UnigramTokenizer(SentencePieceVocab.load(file(pack.translatorVocab.name), json)),
+                config = pack.config,
+            )
+            detector = newDetector
+            recognizer = newRecognizer
+            translator = newTranslator
+        } catch (e: Throwable) {
+            opened.forEach { it.close() }
+            throw e
         }
-        recognizer = OnnxTextRecognizer(
-            encoder = OrtModel.open(file(pack.recognizerEncoder.name), threads),
-            decoder = OrtModel.open(file(pack.recognizerDecoder.name), threads),
-            vocab = OnnxTextRecognizer.loadVocab(file(pack.recognizerVocab.name), json),
-            config = pack.config,
-        )
-        translator = OnnxTranslator(
-            encoder = OrtModel.open(file(pack.translatorEncoder.name), threads),
-            decoder = OrtModel.open(file(pack.translatorDecoder.name), threads),
-            tokenizer = UnigramTokenizer(SentencePieceVocab.load(file(pack.translatorVocab.name), json)),
-            config = pack.config,
-        )
     }
 
     override suspend fun translatePage(

@@ -4,10 +4,10 @@ import androidx.paging.PagingState
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
-import yaku.domain.manga.model.toDomainManga
 import yaku.core.common.util.lang.withIOContext
 import yaku.domain.manga.interactor.NetworkToLocalManga
 import yaku.domain.manga.model.Manga
+import yaku.domain.manga.model.toDomainManga
 import yaku.domain.source.repository.SourcePagingSource
 
 class SourceSearchPagingSource(

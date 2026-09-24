@@ -3,7 +3,6 @@ package yaku.data.extension.service
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import yaku.extension.model.Extension
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.awaitSuccess
@@ -12,15 +11,16 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.okio.decodeFromBufferedSource
 import kotlinx.serialization.protobuf.ProtoBuf
 import logcat.LogPriority
+import okio.BufferedSource
+import okio.buffer
+import okio.gzip
+import yaku.core.common.util.system.logcat
 import yaku.data.extension.model.NetworkExtensionStore
 import yaku.data.extension.model.NetworkLegacyExtension
 import yaku.data.extension.model.NetworkLegacyExtensionRepo
 import yaku.data.extension.model.toAvailableExtensions
 import yaku.domain.extension.model.ExtensionStore
-import okio.BufferedSource
-import okio.buffer
-import okio.gzip
-import yaku.core.common.util.system.logcat
+import yaku.extension.model.Extension
 import kotlin.coroutines.cancellation.CancellationException
 
 @Inject

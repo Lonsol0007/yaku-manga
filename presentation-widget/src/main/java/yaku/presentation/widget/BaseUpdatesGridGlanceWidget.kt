@@ -38,9 +38,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
-import yaku.core.metro.metroGraph
-import yaku.presentation.widget.di.PresentationWidgetGraph
 import yaku.core.common.util.lang.withIOContext
+import yaku.core.metro.metroGraph
 import yaku.domain.manga.model.MangaCover
 import yaku.domain.updates.interactor.GetUpdates
 import yaku.domain.updates.model.UpdatesWithRelations
@@ -48,6 +47,7 @@ import yaku.presentation.widget.components.CoverHeight
 import yaku.presentation.widget.components.CoverWidth
 import yaku.presentation.widget.components.LockedWidget
 import yaku.presentation.widget.components.UpdatesWidget
+import yaku.presentation.widget.di.PresentationWidgetGraph
 import yaku.presentation.widget.util.appWidgetBackgroundRadius
 import yaku.presentation.widget.util.calculateRowAndColumnCount
 import kotlin.time.Clock

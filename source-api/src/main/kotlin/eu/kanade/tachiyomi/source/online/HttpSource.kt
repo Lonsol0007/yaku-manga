@@ -16,8 +16,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import rx.Observable
-import yaku.core.common.util.lang.awaitSingle
 import uy.kohesive.injekt.injectLazy
+import yaku.core.common.util.lang.awaitSingle
 import java.net.URI
 import java.net.URISyntaxException
 import java.security.MessageDigest

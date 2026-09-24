@@ -20,4 +20,8 @@ dependencies {
     implementation(libs.okio)
     implementation(libs.injekt)
     implementation(libs.logcat)
+
+    testImplementation(libs.bundles.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }

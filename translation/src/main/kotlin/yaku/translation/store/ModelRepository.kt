@@ -55,16 +55,26 @@ class ModelRepository(
      * with the device offline, which is the whole point of the feature.
      */
     fun installedPack(packId: String): ModelPack? {
+        if (!isPlainName(packId)) return null
         val descriptor = File(packDir(packId), PACK_DESCRIPTOR)
         if (!descriptor.exists()) return null
-        return runCatching { json.decodeFromString<ModelPack>(descriptor.readText()) }
+        val pack = runCatching { json.decodeFromString<ModelPack>(descriptor.readText()) }
             .onFailure {
                 // Without this a malformed descriptor makes the pack silently invisible in
                 // settings, which is indistinguishable from never having downloaded it.
                 logcat(LogPriority.ERROR, it) { "Unreadable pack descriptor for $packId" }
             }
             .getOrNull()
-            ?.retuned()
+            ?: return null
+
+        // The descriptor's id and file names become paths when the pack is loaded or deleted, so
+        // one that disagrees with the directory it sits in is not a pack this repository installed.
+        val problem = if (pack.id != packId) "it names pack \"${pack.id}\"" else pack.validationError()
+        if (problem != null) {
+            logcat(LogPriority.ERROR) { "Ignoring the pack descriptor in $packId: $problem" }
+            return null
+        }
+        return pack.retuned()
     }
 
     /**
@@ -142,7 +152,15 @@ class ModelRepository(
 
         for (source in sources.map { it.trim() }.filter { it.isNotEmpty() }.distinct()) {
             runCatching { fetchManifest(source) }
-                .onSuccess { packs += it.packs }
+                .onSuccess { manifest ->
+                    // A pack whose names would leave its directory is dropped here, and the source
+                    // is reported for it, rather than offered for download and refused later.
+                    val (usable, unsafe) = manifest.packs.partition { it.validationError() == null }
+                    packs += usable
+                    if (unsafe.isNotEmpty()) {
+                        failures[source] = unsafe.mapNotNull { it.validationError() }.joinToString("; ")
+                    }
+                }
                 .onFailure { error ->
                     // Both the type and the message. Network exceptions frequently carry a null
                     // message (a bare SSLHandshakeException, for one), and "null" on screen
@@ -169,6 +187,11 @@ class ModelRepository(
      * a corrupt model that fails at inference time.
      */
     fun download(pack: ModelPack): Flow<DownloadProgress> = callbackFlow {
+        pack.validationError()?.let {
+            close(IllegalArgumentException(it))
+            return@callbackFlow
+        }
+
         // Packs live in a directory named after their id, so a third-party manifest offering
         // "ja-en-base" would otherwise silently overwrite the installed pack of that name. Refuse
         // instead: replacing someone's working models with an unrelated download, because two
@@ -254,6 +277,11 @@ class ModelRepository(
     }.flowOn(Dispatchers.IO)
 
     suspend fun delete(packId: String) = withContext(Dispatchers.IO) {
+        // deleteRecursively follows the id wherever it points.
+        if (!isPlainName(packId)) {
+            logcat(LogPriority.ERROR) { "Refusing to delete a pack whose id is not a plain name: $packId" }
+            return@withContext
+        }
         packDir(packId).deleteRecursively()
         Unit
     }

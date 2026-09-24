@@ -11,6 +11,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.network.NetworkHelper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -157,6 +158,10 @@ class PageTranslator(
                 rendered.recycle()
                 cache.put(key, encoded)
                 Buffer().write(encoded)
+            } catch (e: CancellationException) {
+                // The page left the screen, so there is no one to show the original to. Reported
+                // as a failure, it also kept the work going and held the gate from the next page.
+                throw e
             } catch (e: Throwable) {
                 logcat(LogPriority.ERROR, e) { "Page translation failed; showing the original" }
                 source

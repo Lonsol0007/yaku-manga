@@ -2,6 +2,7 @@ package yaku.translation.engine.onnx
 
 import android.graphics.Bitmap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -91,7 +92,11 @@ class OnnxTranslationEngine(
         onProgress(TranslationProgress.Detecting)
         val detected = detector.detect(page)
 
+        // Every block is a full encoder-decoder pass and a page can hold dozens, which is tens of
+        // seconds. Checking between them lets a page the reader has already left hand the cores -
+        // and PageTranslator's gate - to the page it moved to.
         val recognized = detected.mapIndexed { index, block ->
+            ensureActive()
             onProgress(TranslationProgress.Recognizing(index, detected.size))
             val text = runCatching { recognizer.recognize(page, block.box) }
                 .onFailure { logcat(LogPriority.WARN, it) { "Recognition failed for a block" } }
@@ -106,6 +111,7 @@ class OnnxTranslationEngine(
         }.filter { it.sourceText != null }
 
         val translated = recognized.mapIndexed { index, block ->
+            ensureActive()
             onProgress(TranslationProgress.Translating(index, recognized.size))
             val text = runCatching { translator.translate(block.sourceText!!, source, target) }
                 .onFailure { logcat(LogPriority.WARN, it) { "Translation failed for a block" } }

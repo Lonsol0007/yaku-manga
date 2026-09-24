@@ -1,10 +1,14 @@
 package yaku.translation.store
 
 import android.content.Context
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
@@ -185,12 +189,11 @@ class ModelRepository(
      * Emits [DownloadProgress] as it goes. Partial downloads are written to a `.part` file and
      * only moved into place once the SHA-256 matches, so an interrupted download can never leave
      * a corrupt model that fails at inference time.
+     *
+     * Cancelling the collection stops the download and removes the partial file.
      */
-    fun download(pack: ModelPack): Flow<DownloadProgress> = callbackFlow {
-        pack.validationError()?.let {
-            close(IllegalArgumentException(it))
-            return@callbackFlow
-        }
+    fun download(pack: ModelPack): Flow<DownloadProgress> = flow {
+        pack.validationError()?.let { throw IllegalArgumentException(it) }
 
         // Packs live in a directory named after their id, so a third-party manifest offering
         // "ja-en-base" would otherwise silently overwrite the installed pack of that name. Refuse
@@ -200,31 +203,28 @@ class ModelRepository(
         if (existing != null && existing.source.isNotEmpty() &&
             pack.source.isNotEmpty() && existing.source != pack.source
         ) {
-            close(
-                IllegalStateException(
-                    "A pack with id '${pack.id}' is already installed from ${existing.source}. " +
-                        "Remove it before installing the one from ${pack.source}.",
-                ),
+            throw IllegalStateException(
+                "A pack with id '${pack.id}' is already installed from ${existing.source}. " +
+                    "Remove it before installing the one from ${pack.source}.",
             )
-            return@callbackFlow
         }
 
         val dir = packDir(pack.id).apply { mkdirs() }
         val total = pack.totalBytes.coerceAtLeast(1L)
         var completedBytes = 0L
 
-        try {
-            for (file in pack.files) {
-                val target = File(dir, file.name)
-                if (target.exists() && sha256(target).equals(file.sha256, ignoreCase = true)) {
-                    completedBytes += target.length()
-                    trySend(DownloadProgress(pack.id, file.name, completedBytes, total))
-                    continue
-                }
+        for (file in pack.files) {
+            val target = File(dir, file.name)
+            if (target.exists() && sha256(target).equals(file.sha256, ignoreCase = true)) {
+                completedBytes += target.length()
+                emit(DownloadProgress(pack.id, file.name, completedBytes, total))
+                continue
+            }
 
-                val part = File(dir, file.name + ".part")
-                part.delete()
+            val part = File(dir, file.name + ".part")
+            part.delete()
 
+            try {
                 val request = Request.Builder()
                     .url(file.url)
                     .cacheControl(CacheControl.FORCE_NETWORK)
@@ -242,6 +242,10 @@ class ModelRepository(
                         // responsive enough to cancel.
                         var lastReport = 0L
                         while (true) {
+                            // The read blocks rather than suspends, so a cancel only lands if it
+                            // is looked for. Without this a cancelled download ran to the end
+                            // out of sight and installed the pack anyway.
+                            currentCoroutineContext().ensureActive()
                             val read = source.read(buffer, DOWNLOAD_CHUNK)
                             if (read == -1L) break
                             sink.write(buffer, read)
@@ -249,7 +253,7 @@ class ModelRepository(
                             val now = System.currentTimeMillis()
                             if (now - lastReport >= PROGRESS_INTERVAL_MS) {
                                 lastReport = now
-                                trySend(DownloadProgress(pack.id, file.name, completedBytes, total))
+                                emit(DownloadProgress(pack.id, file.name, completedBytes, total))
                             }
                         }
                     }
@@ -257,24 +261,26 @@ class ModelRepository(
 
                 val actual = sha256(part)
                 if (!actual.equals(file.sha256, ignoreCase = true)) {
-                    part.delete()
                     error("Checksum mismatch for ${file.name}: expected ${file.sha256}, got $actual")
                 }
-                if (!part.renameTo(target)) {
-                    part.delete()
-                    error("Could not move ${file.name} into place")
-                }
+                if (!part.renameTo(target)) error("Could not move ${file.name} into place")
+            } catch (e: Throwable) {
+                // Failed or cancelled, the partial file is never resumed - the next attempt starts
+                // this file over - so it is only disk being held.
+                part.delete()
+                throw e
             }
-            // Record what was installed so the pack can be loaded later with no network access.
-            File(dir, PACK_DESCRIPTOR).writeText(json.encodeToString(pack))
-            trySend(DownloadProgress(pack.id, null, total, total))
-        } catch (e: Throwable) {
-            logcat(LogPriority.ERROR, e) { "Model download failed for ${pack.id}" }
-            close(e)
-            return@callbackFlow
         }
-        close()
-    }.flowOn(Dispatchers.IO)
+        // Record what was installed so the pack can be loaded later with no network access.
+        File(dir, PACK_DESCRIPTOR).writeText(json.encodeToString(pack))
+        emit(DownloadProgress(pack.id, null, total, total))
+    }
+        .onCompletion { cause ->
+            if (cause != null && cause !is CancellationException) {
+                logcat(LogPriority.ERROR, cause) { "Model download failed for ${pack.id}" }
+            }
+        }
+        .flowOn(Dispatchers.IO)
 
     suspend fun delete(packId: String) = withContext(Dispatchers.IO) {
         // deleteRecursively follows the id wherever it points.

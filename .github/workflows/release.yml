@@ -16,7 +16,9 @@ concurrency:
 
 jobs:
   get_tag:
-    if: github.repository == 'Lonsol0007/yaku-manga'
+    # Dispatched from a branch, GITHUB_REF is refs/heads/<branch>, which the step below passes
+    # through untouched and every APK is then named after a path. Only a tag names a release.
+    if: github.repository == 'Lonsol0007/yaku-manga' && startsWith(github.ref, 'refs/tags/')
     name: Extract tag name
     runs-on: 'ubuntu-24.04'
     outputs:
@@ -113,7 +115,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: mihon-foss
+          name: yaku-manga-foss
           path: yaku-manga-${{ needs.get_tag.outputs.tag }}-foss.apk
 
   release:
@@ -133,8 +135,8 @@ jobs:
         with:
           failOnError: false
           name: |
-            mihon
-            mihon-foss
+            yaku-manga
+            yaku-manga-foss
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2

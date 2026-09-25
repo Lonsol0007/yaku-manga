@@ -107,7 +107,7 @@ class OnnxTranslator(
                                 put(decoderMaskInput, maskTensor)
                             }
                         }
-                        decoder.run(inputs, decoderOutput) { logits, shape -> argmaxLastStep(logits, shape) }
+                        decoder.argmaxAtLastStep(inputs, decoderOutput)
                     }
                 if (next == eosId) return tokenizer.decode(ids.drop(promptLength).map { it.toInt() }.toIntArray())
                 ids.add(next.toLong())
@@ -119,25 +119,8 @@ class OnnxTranslator(
         return tokenizer.decode(ids.drop(promptLength).map { it.toInt() }.toIntArray())
     }
 
-    private fun argmaxLastStep(logits: FloatArray, shape: LongArray): Int {
-        val vocabSize = shape.last().toInt()
-        val offset = logits.size - vocabSize
-        var best = 0
-        var bestValue = Float.NEGATIVE_INFINITY
-        for (i in 0 until vocabSize) {
-            val value = logits[offset + i]
-            if (value > bestValue) {
-                bestValue = value
-                best = i
-            }
-        }
-        return best
-    }
-
     override fun close() {
         encoder.close()
         decoder.close()
     }
-
-    private class EncoderState(val data: FloatArray, val shape: LongArray)
 }

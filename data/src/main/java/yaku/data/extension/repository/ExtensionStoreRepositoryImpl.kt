@@ -5,19 +5,19 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import yaku.extension.model.Extension
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
-import yaku.data.extension.service.ExtensionStoreService
-import yaku.domain.extension.model.ExtensionStore
-import yaku.domain.extension.repository.ExtensionStoreRepository
 import yaku.core.common.util.system.logcat
 import yaku.data.Database
+import yaku.data.extension.service.ExtensionStoreService
 import yaku.data.subscribeToList
 import yaku.data.subscribeToOne
+import yaku.domain.extension.model.ExtensionStore
+import yaku.domain.extension.repository.ExtensionStoreRepository
+import yaku.extension.model.Extension
 
 @Inject
 @SingleIn(AppScope::class)

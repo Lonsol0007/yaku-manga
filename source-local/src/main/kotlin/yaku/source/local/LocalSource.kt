@@ -20,10 +20,11 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import logcat.LogPriority
-import yaku.core.archive.archiveReader
-import yaku.core.archive.epubReader
 import nl.adaptivity.xmlutil.core.AndroidXmlReader
 import nl.adaptivity.xmlutil.serialization.XML
+import uy.kohesive.injekt.injectLazy
+import yaku.core.archive.archiveReader
+import yaku.core.archive.epubReader
 import yaku.core.common.i18n.stringResource
 import yaku.core.common.storage.extension
 import yaku.core.common.storage.nameWithoutExtension
@@ -44,7 +45,6 @@ import yaku.source.local.io.Archive
 import yaku.source.local.io.Format
 import yaku.source.local.io.LocalSourceFileSystem
 import yaku.source.local.metadata.fillMetadata
-import uy.kohesive.injekt.injectLazy
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import kotlin.time.Duration.Companion.days

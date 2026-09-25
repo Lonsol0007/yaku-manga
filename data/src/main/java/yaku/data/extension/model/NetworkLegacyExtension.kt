@@ -1,9 +1,9 @@
 package yaku.data.extension.model
 
 import android.annotation.SuppressLint
-import yaku.extension.model.Extension
 import kotlinx.serialization.Serializable
 import yaku.domain.extension.model.ExtensionStore
+import yaku.extension.model.Extension
 
 @SuppressLint("UnsafeOptInUsageError")
 @Serializable

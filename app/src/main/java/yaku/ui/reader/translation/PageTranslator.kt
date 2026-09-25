@@ -11,6 +11,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.network.NetworkHelper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,6 +28,7 @@ import yaku.translation.engine.onnx.OnnxTranslationEngine
 import yaku.translation.model.TranslationProgress
 import yaku.translation.render.RenderStyle
 import yaku.translation.render.TranslationRenderer
+import yaku.translation.store.ModelPack
 import yaku.translation.store.ModelRepository
 import java.io.ByteArrayOutputStream
 
@@ -86,11 +88,15 @@ class PageTranslator(
     }
 
     private var engine: TranslationEngine? = null
-    private var engineFor: String? = null
+    private var enginePack: ModelPack? = null
 
-    /** Keyed by the page's content hash so the same page is never translated twice. */
-    private val cache = object : LruCache<Int, ByteArray>(preferences.pageCacheSize.get().coerceIn(1, 16)) {
-        override fun sizeOf(key: Int, value: ByteArray) = 1
+    /**
+     * Keyed by the page's content hash and the languages chosen, so the same page is never
+     * translated twice and a change of language is not answered with the page in the old one.
+     * A change of pack goes through [release], which empties it.
+     */
+    private val cache = object : LruCache<PageKey, ByteArray>(preferences.pageCacheSize.get().coerceIn(1, 16)) {
+        override fun sizeOf(key: PageKey, value: ByteArray) = 1
     }
 
     /**
@@ -118,7 +124,7 @@ class PageTranslator(
         if (!isEnabled()) return source
 
         val bytes = source.peek().readByteArray()
-        val key = bytes.contentHashCode()
+        val key = PageKey(bytes.contentHashCode(), preferences.sourceLanguage.get(), preferences.targetLanguage.get())
         cache.get(key)?.let { return Buffer().write(it) }
 
         return gate.withLock {
@@ -127,14 +133,15 @@ class PageTranslator(
 
             try {
                 val engine = engineOrNull() ?: return@withLock source
+                val pack = enginePack ?: return@withLock source
                 val page = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                     ?: return@withLock source
 
                 val result = try {
                     engine.translatePage(
                         page = page,
-                        source = preferences.source(),
-                        target = preferences.target(),
+                        source = preferences.source(pack),
+                        target = preferences.target(pack),
                         onProgress = ::logProgress,
                     )
                 } finally {
@@ -157,6 +164,10 @@ class PageTranslator(
                 rendered.recycle()
                 cache.put(key, encoded)
                 Buffer().write(encoded)
+            } catch (e: CancellationException) {
+                // The page left the screen, so there is no one to show the original to. Reported
+                // as a failure, it also kept the work going and held the gate from the next page.
+                throw e
             } catch (e: Throwable) {
                 logcat(LogPriority.ERROR, e) { "Page translation failed; showing the original" }
                 source
@@ -170,19 +181,19 @@ class PageTranslator(
         if (packId.isBlank()) return null
 
         val current = engine
-        if (current != null && engineFor == packId) {
+        if (current != null && enginePack?.id == packId) {
             if (current.isReady()) return current
             // The pack was deleted underneath us. Drop the engine rather than holding a handle
             // to missing files, which would otherwise fail identically on every later page.
             current.close()
             engine = null
-            engineFor = null
+            enginePack = null
             return null
         }
 
         current?.close()
         engine = null
-        engineFor = null
+        enginePack = null
 
         val pack = repository.installedPack(packId) ?: return null
         val created = OnnxTranslationEngine(pack, repository, json = json)
@@ -191,7 +202,7 @@ class PageTranslator(
             return null
         }
         engine = created
-        engineFor = packId
+        enginePack = pack
         return created
     }
 
@@ -219,9 +230,11 @@ class PageTranslator(
     suspend fun release() = gate.withLock {
         engine?.close()
         engine = null
-        engineFor = null
+        enginePack = null
         cache.evictAll()
     }
+
+    private data class PageKey(val contentHash: Int, val sourceLanguage: String, val targetLanguage: String)
 
     private companion object {
         const val JPEG_QUALITY = 90

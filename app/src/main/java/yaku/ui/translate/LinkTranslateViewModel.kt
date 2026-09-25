@@ -139,7 +139,12 @@ class LinkTranslateViewModel(
 
         urls.forEachIndexed { index, imageUrl ->
             val page = runCatching { translateOne(imageUrl, index, prefetched, pageUrl) }
-                .onFailure { logcat(LogPriority.WARN, it) { "Failed on $imageUrl" } }
+                .onFailure {
+                    // Swallowed, Cancel only failed this page: the loop went on to the rest and
+                    // wrote its progress back over the idle screen.
+                    if (it is CancellationException) throw it
+                    logcat(LogPriority.WARN, it) { "Failed on $imageUrl" }
+                }
                 .getOrNull()
 
             _state.update { current ->
@@ -159,7 +164,10 @@ class LinkTranslateViewModel(
             TranslatedChapterPublisher.Outcome.Failed
         } else {
             runCatching { publisher.publish(url, translated.map { it.file }) }
-                .onFailure { logcat(LogPriority.ERROR, it) { "Could not file the translated chapter" } }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    logcat(LogPriority.ERROR, it) { "Could not file the translated chapter" }
+                }
                 .getOrDefault(TranslatedChapterPublisher.Outcome.Failed)
         }
 

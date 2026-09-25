@@ -2,6 +2,7 @@ package yaku.translation.engine.onnx
 
 import android.graphics.Bitmap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -51,27 +52,41 @@ class OnnxTranslationEngine(
     private fun loadIfNeeded() {
         if (detector != null && recognizer != null && translator != null) return
 
-        // Both kinds answer the same question and nothing downstream can tell them apart,
-        // but they arrive at it so differently that they cannot share an implementation: one
-        // thresholds a map and groups blobs, the other reads boxes the model already drew.
-        val detectorModel = OrtModel.open(file(pack.detector.name), threads)
-        detector = if (pack.config.detectorKind == COMIC_DETECTOR) {
-            OnnxComicDetector(detectorModel, pack.config)
-        } else {
-            OnnxTextDetector(detectorModel, pack.config)
+        // A pack can fail part way through loading - a missing or corrupt file, or a graph
+        // without the input a stage expects - after other sessions have already opened. Each
+        // holds tens to hundreds of MB of native memory that nothing else would free, and the
+        // next page would open them all again. So nothing is kept unless everything loads.
+        val opened = mutableListOf<OrtModel>()
+        fun openModel(name: String) = OrtModel.open(file(name), threads).also { opened += it }
+        try {
+            // Both kinds answer the same question and nothing downstream can tell them apart,
+            // but they arrive at it so differently that they cannot share an implementation: one
+            // thresholds a map and groups blobs, the other reads boxes the model already drew.
+            val detectorModel = openModel(pack.detector.name)
+            val newDetector = if (pack.config.detectorKind == COMIC_DETECTOR) {
+                OnnxComicDetector(detectorModel, pack.config)
+            } else {
+                OnnxTextDetector(detectorModel, pack.config)
+            }
+            val newRecognizer = OnnxTextRecognizer(
+                encoder = openModel(pack.recognizerEncoder.name),
+                decoder = openModel(pack.recognizerDecoder.name),
+                vocab = OnnxTextRecognizer.loadVocab(file(pack.recognizerVocab.name), json),
+                config = pack.config,
+            )
+            val newTranslator = OnnxTranslator(
+                encoder = openModel(pack.translatorEncoder.name),
+                decoder = openModel(pack.translatorDecoder.name),
+                tokenizer = UnigramTokenizer(SentencePieceVocab.load(file(pack.translatorVocab.name), json)),
+                config = pack.config,
+            )
+            detector = newDetector
+            recognizer = newRecognizer
+            translator = newTranslator
+        } catch (e: Throwable) {
+            opened.forEach { it.close() }
+            throw e
         }
-        recognizer = OnnxTextRecognizer(
-            encoder = OrtModel.open(file(pack.recognizerEncoder.name), threads),
-            decoder = OrtModel.open(file(pack.recognizerDecoder.name), threads),
-            vocab = OnnxTextRecognizer.loadVocab(file(pack.recognizerVocab.name), json),
-            config = pack.config,
-        )
-        translator = OnnxTranslator(
-            encoder = OrtModel.open(file(pack.translatorEncoder.name), threads),
-            decoder = OrtModel.open(file(pack.translatorDecoder.name), threads),
-            tokenizer = UnigramTokenizer(SentencePieceVocab.load(file(pack.translatorVocab.name), json)),
-            config = pack.config,
-        )
     }
 
     override suspend fun translatePage(
@@ -87,11 +102,17 @@ class OnnxTranslationEngine(
         val detector = detector!!
         val recognizer = recognizer!!
         val translator = translator!!
+        val loaded = System.currentTimeMillis()
 
         onProgress(TranslationProgress.Detecting)
         val detected = detector.detect(page)
+        val detectedAt = System.currentTimeMillis()
 
+        // Every block is a full encoder-decoder pass and a page can hold dozens, which is tens of
+        // seconds. Checking between them lets a page the reader has already left hand the cores -
+        // and PageTranslator's gate - to the page it moved to.
         val recognized = detected.mapIndexed { index, block ->
+            ensureActive()
             onProgress(TranslationProgress.Recognizing(index, detected.size))
             val text = runCatching { recognizer.recognize(page, block.box) }
                 .onFailure { logcat(LogPriority.WARN, it) { "Recognition failed for a block" } }
@@ -104,14 +125,24 @@ class OnnxTranslationEngine(
             // failure, so losing the odd interjection is the better trade.
             block.copy(sourceText = text.takeIf { it.count(Char::isLetter) >= MIN_SOURCE_LETTERS })
         }.filter { it.sourceText != null }
+        val recognizedAt = System.currentTimeMillis()
 
         val translated = recognized.mapIndexed { index, block ->
+            ensureActive()
             onProgress(TranslationProgress.Translating(index, recognized.size))
             val text = runCatching { translator.translate(block.sourceText!!, source, target) }
                 .onFailure { logcat(LogPriority.WARN, it) { "Translation failed for a block" } }
                 .getOrDefault("")
             val cleaned = tidy(text)
             block.copy(translatedText = cleaned.takeIf { it.isNotBlank() && isProportionate(it, block.sourceText!!) })
+        }
+        val translatedAt = System.currentTimeMillis()
+
+        // Per stage, so a change aimed at one of them can be measured on a device instead of assumed.
+        logcat {
+            "Page took ${translatedAt - started}ms: load ${loaded - started}, detect ${detectedAt - loaded}, " +
+                "recognise ${recognizedAt - detectedAt} (${detected.size} regions), " +
+                "translate ${translatedAt - recognizedAt} (${recognized.size} lines)"
         }
 
         PageTranslation(
@@ -120,7 +151,7 @@ class OnnxTranslationEngine(
             blocks = translated,
             sourceLanguage = source,
             targetLanguage = target,
-            elapsedMillis = System.currentTimeMillis() - started,
+            elapsedMillis = translatedAt - started,
         ).also { onProgress(TranslationProgress.Done(it)) }
     }
 

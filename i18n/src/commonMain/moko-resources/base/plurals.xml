@@ -114,4 +114,9 @@
         <item quantity="one">%1$d update failed</item>
         <item quantity="other">%1$d updates failed</item>
     </plurals>
+
+    <plurals name="pref_translation_checking_sources">
+        <item quantity="one">Checking %1$d source…</item>
+        <item quantity="other">Checking %1$d sources…</item>
+    </plurals>
 </resources>

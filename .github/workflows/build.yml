@@ -11,7 +11,7 @@ on:
       - 'i18n/src/commonMain/moko-resources/base/plurals.xml'
   push:
     branches:
-      - yaku-manga
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -31,6 +31,9 @@ jobs:
 
       - name: Dependency Review
         if: github.event_name == 'pull_request'
+        # Needs the repository's Dependency graph (Settings > Security). Until that is on, the action
+        # errors out before reviewing anything, and failing the job here skipped every check after it.
+        continue-on-error: true
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
 
       - name: Set up JDK
@@ -60,7 +63,9 @@ jobs:
           path: app/build/reports/tests/testDebugUnitTest
 
       - name: Build app
-        run: ./gradlew assembleRelease -Pinclude-telemetry -Penable-updater
+        # No -Pinclude-telemetry: app/google-services.json is Mihon's and has no client for app.yaku,
+        # so a telemetry build stops at processReleaseGoogleServices.
+        run: ./gradlew assembleRelease -Penable-updater
 
       - name: Upload APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

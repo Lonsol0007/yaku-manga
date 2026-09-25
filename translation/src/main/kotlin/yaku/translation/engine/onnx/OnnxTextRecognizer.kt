@@ -64,32 +64,16 @@ class OnnxTextRecognizer(
             repeat(config.recognizerMaxTokens) {
                 val next = decoder.longTensor(ids.toLongArray(), longArrayOf(1, ids.size.toLong()))
                     .use { idsTensor ->
-                        decoder.run(
+                        decoder.argmaxAtLastStep(
                             mapOf(decoderIdsInput to idsTensor, decoderStateInput to stateTensor),
                             decoderOutput,
-                        ) { logits, shape -> argmaxLastStep(logits, shape) }
+                        )
                     }
                 if (next == eosId) return detokenize(ids)
                 ids.add(next.toLong())
             }
         }
         return detokenize(ids)
-    }
-
-    /** logits arrive as [1, steps, vocab]; we only care about the final step. */
-    private fun argmaxLastStep(logits: FloatArray, shape: LongArray): Int {
-        val vocabSize = shape.last().toInt()
-        val offset = logits.size - vocabSize
-        var best = 0
-        var bestValue = Float.NEGATIVE_INFINITY
-        for (i in 0 until vocabSize) {
-            val value = logits[offset + i]
-            if (value > bestValue) {
-                bestValue = value
-                best = i
-            }
-        }
-        return best
     }
 
     private fun detokenize(ids: List<Long>): String {
@@ -115,8 +99,6 @@ class OnnxTextRecognizer(
         encoder.close()
         decoder.close()
     }
-
-    private class EncoderState(val data: FloatArray, val shape: LongArray)
 
     companion object {
         private const val BOS = "[CLS]"

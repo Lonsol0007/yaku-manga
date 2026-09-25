@@ -61,21 +61,35 @@ class OrtModel private constructor(
         inputs: Map<String, OnnxTensor>,
         outputName: String?,
         block: (data: FloatArray, shape: LongArray) -> T,
-    ): T {
+    ): T = session.run(inputs).use { results ->
+        val tensor = results.tensor(outputName)
+        val buffer = tensor.floatBuffer
+        val data = FloatArray(buffer.remaining())
+        buffer.get(data)
+        block(data, tensor.info.shape)
+    }
+
+    /**
+     * Runs one decoder step and returns the token with the highest logit at the final position.
+     *
+     * A decoder answers with logits for every position so far, `[1, steps, vocab]`, and greedy
+     * decoding reads only the last row. Copying the whole tensor into an array first, as [run]
+     * does, allocated a vocabulary-sized row for every step already taken - on every step, on top
+     * of the copy ONNX Runtime makes itself.
+     */
+    fun argmaxAtLastStep(inputs: Map<String, OnnxTensor>, outputName: String?): Int =
         session.run(inputs).use { results ->
-            val value = if (outputName != null && outputNames.contains(outputName)) {
-                results.get(outputName).orElseThrow { IllegalStateException("No output '$outputName'") }
-            } else {
-                results.get(0)
-            }
-            val tensor = value as? OnnxTensor
-                ?: error("Output '${outputName ?: 0}' is not a tensor")
-            val shape = tensor.info.shape
-            val buffer = tensor.floatBuffer
-            val data = FloatArray(buffer.remaining())
-            buffer.get(data)
-            return block(data, shape)
+            val tensor = results.tensor(outputName)
+            argmaxOfLastRow(tensor.floatBuffer, rowLength = tensor.info.shape.last().toInt())
         }
+
+    private fun OrtSession.Result.tensor(outputName: String?): OnnxTensor {
+        val value = if (outputName != null && outputNames.contains(outputName)) {
+            get(outputName).orElseThrow { IllegalStateException("No output '$outputName'") }
+        } else {
+            get(0)
+        }
+        return value as? OnnxTensor ?: error("Output '${outputName ?: 0}' is not a tensor")
     }
 
     override fun close() {
@@ -103,4 +117,24 @@ class OrtModel private constructor(
             return OrtModel(env, env.createSession(file.absolutePath, options))
         }
     }
+}
+
+/**
+ * An encoder's output, copied out of its session so every decoder step can be fed the same state.
+ */
+internal class EncoderState(val data: FloatArray, val shape: LongArray)
+
+/** Index of the largest of the last [rowLength] values - the final step's best token. */
+internal fun argmaxOfLastRow(values: FloatBuffer, rowLength: Int): Int {
+    val offset = values.limit() - rowLength
+    var best = 0
+    var bestValue = Float.NEGATIVE_INFINITY
+    for (i in 0 until rowLength) {
+        val value = values.get(offset + i)
+        if (value > bestValue) {
+            bestValue = value
+            best = i
+        }
+    }
+    return best
 }

@@ -1,8 +1,8 @@
 package yaku.domain.extension.repository
 
-import yaku.extension.model.Extension
 import kotlinx.coroutines.flow.Flow
 import yaku.domain.extension.model.ExtensionStore
+import yaku.extension.model.Extension
 
 interface ExtensionStoreRepository {
     suspend fun insert(indexUrl: String): Result<Unit>

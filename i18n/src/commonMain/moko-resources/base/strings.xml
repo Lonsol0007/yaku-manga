@@ -1120,6 +1120,9 @@
     <string name="pref_translation_download_failed">Download failed</string>
     <string name="pref_translation_download_incomplete">Download did not complete — the pack is not installed</string>
     <string name="pref_translation_sources_empty">No packs were offered and no source reported an error. Check the source URL under Pack sources.</string>
+    <string name="pref_translation_source_invalid">Must start with http:// or https://</string>
+    <string name="pref_translation_add_source_first">Add a pack source first</string>
+    <string name="pref_translation_downloaded">Downloaded %1$s</string>
     <string name="label_continue_reading_chapter">Continue • Chapter %1$s</string>
     <string name="action_clear">Clear</string>
     <string name="translate_link_saved">Saved %1$d page(s) to Pictures</string>

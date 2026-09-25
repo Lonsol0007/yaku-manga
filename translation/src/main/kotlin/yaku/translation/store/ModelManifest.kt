@@ -54,7 +54,32 @@ data class ModelPack(
         )
 
     val totalBytes: Long get() = files.sumOf { it.sizeBytes }
+
+    /**
+     * Why this pack cannot be used as it stands, or null when it can.
+     *
+     * The id names a directory and each file name a file inside it, and both arrive in a manifest
+     * someone else wrote. A `../` in either would let a download write - and a delete remove -
+     * anywhere in the app's private storage, and the checksum is no defence: it comes from the same
+     * manifest. Plain names are all a pack needs, so anything else is refused.
+     */
+    fun validationError(): String? {
+        if (!isPlainName(id)) return "Pack id \"$id\" is not a plain name"
+        val names = files.map { it.name }
+        val unsafe = names.firstOrNull { !isPlainName(it) }
+        if (unsafe != null) return "Pack $id names a file \"$unsafe\", which is not a plain name"
+        if (ModelRepository.PACK_DESCRIPTOR in names) {
+            return "Pack $id names a file ${ModelRepository.PACK_DESCRIPTOR}, which is reserved"
+        }
+        if (names.distinct().size != names.size) return "Pack $id names the same file twice"
+        return null
+    }
 }
+
+/** Letters, digits, `.`, `_` and `-`, starting with a letter or digit - so never `.`, `..` or a path. */
+private val PLAIN_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+
+internal fun isPlainName(name: String): Boolean = PLAIN_NAME.matches(name)
 
 @Serializable
 data class ModelFile(

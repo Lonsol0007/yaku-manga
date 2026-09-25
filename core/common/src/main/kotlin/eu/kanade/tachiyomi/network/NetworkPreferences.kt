@@ -3,9 +3,9 @@ package eu.kanade.tachiyomi.network
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import yaku.core.metro.IsDebugBuild
 import yaku.core.common.preference.Preference
 import yaku.core.common.preference.PreferenceStore
+import yaku.core.metro.IsDebugBuild
 
 @Inject
 @SingleIn(AppScope::class)

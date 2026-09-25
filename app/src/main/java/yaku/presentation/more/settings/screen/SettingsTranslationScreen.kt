@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.util.system.activeNetworkState
 import kotlinx.coroutines.launch
 import yaku.app.di.appGraph
+import yaku.core.common.i18n.pluralStringResource
 import yaku.i18n.MR
 import yaku.presentation.core.i18n.stringResource
 import yaku.presentation.core.util.collectAsState
@@ -190,6 +191,7 @@ private fun PackSources(prefs: TranslationPreferences) {
     var showAdd by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    val invalidSourceMessage = stringResource(MR.strings.pref_translation_source_invalid)
 
     fun commit(updated: Set<String>) {
         sources = updated
@@ -267,7 +269,7 @@ private fun PackSources(prefs: TranslationPreferences) {
                         // Validated here rather than at fetch time, so a typo is caught while the
                         // user is still looking at the field they typed it into.
                         if (!candidate.startsWith("http://") && !candidate.startsWith("https://")) {
-                            error = "Must start with http:// or https://"
+                            error = invalidSourceMessage
                         } else {
                             commit(sources + candidate)
                             showAdd = false
@@ -304,6 +306,7 @@ private fun PackDownloader(
     val wifiRequiredMessage = stringResource(MR.strings.pref_translation_wifi_required)
     val failedLabel = stringResource(MR.strings.pref_translation_download_failed)
     val incompleteLabel = stringResource(MR.strings.pref_translation_download_incomplete)
+    val addSourceFirstMessage = stringResource(MR.strings.pref_translation_add_source_first)
     var packs by remember { mutableStateOf<List<ModelPack>>(emptyList()) }
     var failures by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var showDialog by remember { mutableStateOf(false) }
@@ -325,11 +328,15 @@ private fun PackDownloader(
             onClick = {
                 val sources = prefs.packSources.get()
                 if (sources.isEmpty()) {
-                    status = "Add a pack source first"
+                    status = addSourceFirstMessage
                     return@OutlinedButton
                 }
                 scope.launch {
-                    status = "Checking ${sources.size} source(s)…"
+                    status = context.pluralStringResource(
+                        MR.plurals.pref_translation_checking_sources,
+                        sources.size,
+                        sources.size,
+                    )
                     val results = translator.repository.fetchAll(sources)
                     packs = results.packs
                     failures = results.failures
@@ -363,7 +370,7 @@ private fun PackDownloader(
         val downloadStatus = when (val state = download) {
             is PackInstaller.State.Failed -> state.message ?: failedLabel
             is PackInstaller.State.Incomplete -> incompleteLabel
-            is PackInstaller.State.Finished -> "Downloaded ${state.pack.name}"
+            is PackInstaller.State.Finished -> stringResource(MR.strings.pref_translation_downloaded, state.pack.name)
             else -> null
         }
         (status ?: downloadStatus)?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }

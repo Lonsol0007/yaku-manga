@@ -102,9 +102,11 @@ class OnnxTranslationEngine(
         val detector = detector!!
         val recognizer = recognizer!!
         val translator = translator!!
+        val loaded = System.currentTimeMillis()
 
         onProgress(TranslationProgress.Detecting)
         val detected = detector.detect(page)
+        val detectedAt = System.currentTimeMillis()
 
         // Every block is a full encoder-decoder pass and a page can hold dozens, which is tens of
         // seconds. Checking between them lets a page the reader has already left hand the cores -
@@ -123,6 +125,7 @@ class OnnxTranslationEngine(
             // failure, so losing the odd interjection is the better trade.
             block.copy(sourceText = text.takeIf { it.count(Char::isLetter) >= MIN_SOURCE_LETTERS })
         }.filter { it.sourceText != null }
+        val recognizedAt = System.currentTimeMillis()
 
         val translated = recognized.mapIndexed { index, block ->
             ensureActive()
@@ -133,6 +136,14 @@ class OnnxTranslationEngine(
             val cleaned = tidy(text)
             block.copy(translatedText = cleaned.takeIf { it.isNotBlank() && isProportionate(it, block.sourceText!!) })
         }
+        val translatedAt = System.currentTimeMillis()
+
+        // Per stage, so a change aimed at one of them can be measured on a device instead of assumed.
+        logcat {
+            "Page took ${translatedAt - started}ms: load ${loaded - started}, detect ${detectedAt - loaded}, " +
+                "recognise ${recognizedAt - detectedAt} (${detected.size} regions), " +
+                "translate ${translatedAt - recognizedAt} (${recognized.size} lines)"
+        }
 
         PageTranslation(
             pageWidth = page.width,
@@ -140,7 +151,7 @@ class OnnxTranslationEngine(
             blocks = translated,
             sourceLanguage = source,
             targetLanguage = target,
-            elapsedMillis = System.currentTimeMillis() - started,
+            elapsedMillis = translatedAt - started,
         ).also { onProgress(TranslationProgress.Done(it)) }
     }
 
